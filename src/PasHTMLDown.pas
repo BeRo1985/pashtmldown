@@ -1,12 +1,12 @@
 (******************************************************************************
  *                         PasHTMLDown MarkDown Libary                        *
  ******************************************************************************
- *                        Version 2016-10-26-12-36-0000                       *
+ *                        Version 2017-02-04-22-41-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
  *                                                                            *
- * Copyright (C) 2016, Benjamin Rosseaux (benjamin@rosseaux.de)               *
+ * Copyright (C) 2016-2017, Benjamin Rosseaux (benjamin@rosseaux.de)          *
  *                                                                            *
  * This software is provided 'as-is', without any express or implied          *
  * warranty. In no event will the authors be held liable for any damages      *
@@ -5038,7 +5038,7 @@ var RootMarkDownBlock:PMarkDownBlock;
        end;
       end;
       '\':begin
-       if ((EndPosition+1)<=pInputToPosition) and (pInputText[EndPosition+1] in ['*','_','~','=','`',#10,'[',']','<','>','#','+','-','.','!','|','&','(',')','{','}','\','&',':','^']) then begin
+       if ((EndPosition+1)<=pInputToPosition) and (pInputText[EndPosition+1] in ['*','_','~','=','`',#10,'[',']','<','>','#','+','-','.','!','|','&','(',')','{','}','\',':','^']) then begin
         BlockText:=pInputText[EndPosition+1];
         if assigned(pParentMarkDownBlock^.Tail) and (pParentMarkDownBlock^.Tail^.BlockType=mdbtText) then begin
          pParentMarkDownBlock^.Tail^.StringData:=pParentMarkDownBlock^.Tail^.StringData+BlockText;
