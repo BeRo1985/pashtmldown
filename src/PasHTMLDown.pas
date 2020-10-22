@@ -1,12 +1,12 @@
 (******************************************************************************
  *                         PasHTMLDown MarkDown Libary                        *
  ******************************************************************************
- *                        Version 2017-02-04-22-41-0000                       *
+ *                        Version 2020-10-22-02-18-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
  *                                                                            *
- * Copyright (C) 2016-2017, Benjamin Rosseaux (benjamin@rosseaux.de)          *
+ * Copyright (C) 2016-2020, Benjamin Rosseaux (benjamin@rosseaux.de)          *
  *                                                                            *
  * This software is provided 'as-is', without any express or implied          *
  * warranty. In no event will the authors be held liable for any damages      *
@@ -324,8 +324,8 @@ type THTMLCharset=(ISO_8859_1,ISO_8859_2,ISO_8859_3,ISO_8859_4,ISO_8859_5,
 
      PHTMLTagParameter=^THTMLTagParameter;
      THTMLTagParameter=record
-      Name:ansistring;
-      Value:ansistring;
+      Name:RawByteString;
+      Value:RawByteString;
      end;
 
      THTMLTagParameters=array of THTMLTagParameter;
@@ -336,8 +336,8 @@ type THTMLCharset=(ISO_8859_1,ISO_8859_2,ISO_8859_3,ISO_8859_4,ISO_8859_5,
 
      THTMLNode=record
       NodeType:THTMLNodeType;
-      TagName:ansistring;
-      Text:ansistring;
+      TagName:RawByteString;
+      Text:RawByteString;
       TagParameters:THTMLTagParameters;
       Children:TPHTMLNodes;
      end;
@@ -345,14 +345,14 @@ type THTMLCharset=(ISO_8859_1,ISO_8859_2,ISO_8859_3,ISO_8859_4,ISO_8859_5,
      THTML=class
       public
        RootNode:THTMLNode;
-       constructor Create(Input:ansistring;Charset:THTMLCharset=UTF_8);
+       constructor Create(Input:RawByteString;Charset:THTMLCharset=UTF_8);
        destructor Destroy; override;
-       function GetPlainText:ansistring;
-       function GetMarkDown:ansistring;
-       function GetHTML(AllowedTags:TStringList=nil):ansistring;
+       function GetPlainText:RawByteString;
+       function GetMarkDown:RawByteString;
+       function GetHTML(AllowedTags:TStringList=nil):RawByteString;
      end;
 
-function MarkDownToHTML(const pInputText:ansistring):ansistring;
+function MarkDownToHTML(const pInputText:RawByteString):RawByteString;
 
 implementation
 
@@ -370,7 +370,7 @@ begin
  end;
 end;
 
-function DecodeBase64(s:ansistring):ansistring;
+function DecodeBase64(s:RawByteString):RawByteString;
 var i,j,l:longint;
     c:longword;
 begin
@@ -419,7 +419,7 @@ begin
  setlength(result,l);
 end;
 
-function EncodeBase64(s:ansistring):ansistring;
+function EncodeBase64(s:RawByteString):RawByteString;
 var i,l:longint;
     c:longword;
 begin
@@ -461,10 +461,10 @@ begin
  end;
 end;
 
-function Dequote(s:ansistring):ansistring;
+function Dequote(s:RawByteString):RawByteString;
 const hexa:array[1..$F] of ansichar='123456789ABCDEF';
 var p:longint;
-    encode:ansistring;
+    encode:RawByteString;
 begin
  if s='' then begin
   result:=#13#10;
@@ -896,7 +896,7 @@ begin
  end;
 end;
 
-function UTF8ToUCS4(Value:ansistring):ansistring;
+function UTF8ToUCS4(Value:RawByteString):RawByteString;
 var i,j:longint;
     b:byte;
     Buffer:array of longword;
@@ -1041,7 +1041,7 @@ begin
  setlength(Buffer,0);
 end;
 
-function UCS4toUTF8(Value:ansistring):ansistring;
+function UCS4toUTF8(Value:RawByteString):RawByteString;
 var i,j:longint;
     u4c:longword;
     s:array of longword;
@@ -1127,10 +1127,10 @@ begin
  setlength(s,0);
 end;
 
-function UTF7toUCS2(Value:ansistring):ansistring;
+function UTF7toUCS2(Value:RawByteString):RawByteString;
 var i:longint;
     c:ansichar;
-    s:ansistring;
+    s:RawByteString;
 begin
  result:='';
  i:=1;
@@ -1162,8 +1162,8 @@ begin
  end;
 end;
 
-function UCS2toUTF7(Value:ansistring):ansistring;
-var s:ansistring;
+function UCS2toUTF7(Value:RawByteString):RawByteString;
+var s:RawByteString;
     c1,c2:ansichar;
     i,j:longint;
 begin
@@ -1209,7 +1209,7 @@ begin
  end;
 end;
 
-function EncodeString(Value:ansistring;CharFrom:THTMLCharset;CharTo:THTMLCharset):ansistring;
+function EncodeString(Value:RawByteString;CharFrom:THTMLCharset;CharTo:THTMLCharset):RawByteString;
 var Unicode:word;
     i,j:longint;
     b:byte;
@@ -1351,7 +1351,7 @@ begin
  end;
 end;
 
-function GetCodePage(Value:ansistring):THTMLCharset;
+function GetCodePage(Value:RawByteString):THTMLCharset;
 begin
  Value:=uppercase(Value);
  if pos('ISO-8859-10',Value)>0 then begin
@@ -1409,7 +1409,7 @@ begin
  end;
 end;
 
-function GetCodePageID(Value:THTMLCharset):ansistring;
+function GetCodePageID(Value:THTMLCharset):RawByteString;
 begin
  case Value of
   ISO_8859_2:result:='ISO-8859-2';
@@ -1439,7 +1439,7 @@ begin
  end;
 end;
 
-function DoNeedEncoding(Value:ansistring):boolean;
+function DoNeedEncoding(Value:RawByteString):boolean;
 var i:longint;
 begin
  result:=false;
@@ -1451,10 +1451,10 @@ begin
  end;
 end;
 
-function FindIdealCoding(Value:ansistring;CharFrom:THTMLCharset;CharTo:TCharsetSet):THTMLCharset;
+function FindIdealCoding(Value:RawByteString;CharFrom:THTMLCharset;CharTo:TCharsetSet):THTMLCharset;
 var cs:THTMLCharset;
     i,j,k:longint;
-    s,t:ansistring;
+    s,t:RawByteString;
 begin
  result:=ISO_8859_1;
  s:='';
@@ -1484,8 +1484,8 @@ begin
  end;
 end;
 
-function ISOToUTF8(s:ansistring):ansistring;
-var q,us,e:ansistring;
+function ISOToUTF8(s:RawByteString):RawByteString;
+var q,us,e:RawByteString;
     encode:ansichar;
     p1,p2,p3:longint;
     cs:THTMLCharset;
@@ -1620,7 +1620,7 @@ const ustNOUTF8=0;
 
 type TUCS4Char=longint;
 
-     TUTF8String=ansistring;
+     TUTF8String=RawByteString;
 
      TUTF8Chars=array[ansichar] of byte;
 
@@ -1671,7 +1671,7 @@ const UTF8CharSteps:TUTF8Chars=(1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,  // 0
 var UTF8DFACharClasses:TUTF8Chars;
     UTF8DFATransitions:TUTF8Bytes;
 
-function UTF32CharToUTF8(CharValue:longword):ansistring;
+function UTF32CharToUTF8(CharValue:longword):RawByteString;
 var Data:array[0..{$ifdef strictutf8}3{$else}5{$endif}] of ansichar;
     ResultLen:longint;
 begin
@@ -1735,7 +1735,7 @@ begin
  end;
 end;
 
-function UTF32CharToUTF8At(CharValue:longword;var s:ansistring;Index:longint):longint;
+function UTF32CharToUTF8At(CharValue:longword;var s:RawByteString;Index:longint):longint;
 var Data:array[0..{$ifdef strictutf8}3{$else}5{$endif}] of ansichar;
     ResultLen:longint;
 begin
@@ -1824,7 +1824,7 @@ begin
  end;
 end;
 
-function IsUTF8(const s:ansistring):boolean;
+function IsUTF8(const s:RawByteString):boolean;
 var CodeUnit,CodePoints:longint;
     State:longword;
 begin
@@ -1845,7 +1845,7 @@ begin
  result:=(State=usmcACCEPT) and (length(s)<>CodePoints);
 end;
 
-function ValidateUTF8(const s:ansistring):boolean;
+function ValidateUTF8(const s:RawByteString):boolean;
 var CodeUnit:longint;
     State:longword;
 begin
@@ -1860,7 +1860,7 @@ begin
  result:=State=usmcACCEPT;
 end;
 
-function GetUTF8(const s:ansistring):longint;
+function GetUTF8(const s:RawByteString):longint;
 var CodeUnit,CodePoints:longint;
     State:longword;
 begin
@@ -1889,7 +1889,7 @@ begin
  end;
 end;
 
-procedure UTF8SafeInc(const s:ansistring;var CodeUnit:longint);
+procedure UTF8SafeInc(const s:RawByteString;var CodeUnit:longint);
 var Len:longint;
     StartCodeUnit,State:longword;
 begin
@@ -1910,14 +1910,14 @@ begin
  end;
 end;
 
-procedure UTF8Inc(const s:ansistring;var CodeUnit:longint);
+procedure UTF8Inc(const s:RawByteString;var CodeUnit:longint);
 begin
  if (CodeUnit>0) and (CodeUnit<=length(s)) then begin
   inc(CodeUnit,UTF8CharSteps[s[CodeUnit]]);
  end;
 end;
 
-procedure UTF8Dec(const s:ansistring;var CodeUnit:longint);
+procedure UTF8Dec(const s:RawByteString;var CodeUnit:longint);
 begin
  if (CodeUnit>=1) and (CodeUnit<=(length(s)+1)) then begin
   dec(CodeUnit);
@@ -1931,7 +1931,7 @@ begin
  end;
 end;
 
-procedure UTF8Delete(var s:ansistring;CodeUnit:longint);
+procedure UTF8Delete(var s:RawByteString;CodeUnit:longint);
 begin
  if (CodeUnit>=1) and (CodeUnit<=length(s)) then begin
   Delete(s,CodeUnit,1);
@@ -1941,7 +1941,7 @@ begin
  end;
 end;
 
-function UTF8Length(const s:ansistring):longint;
+function UTF8Length(const s:RawByteString):longint;
 {$ifdef cpu386} assembler; register;
 asm
  test eax,eax
@@ -1979,7 +1979,7 @@ begin
 end;
 {$endif}
 
-function UTF8LengthEx(const s:ansistring):longint;
+function UTF8LengthEx(const s:RawByteString):longint;
 var State:longword;
     CodeUnit:longint;
 begin
@@ -2002,7 +2002,7 @@ begin
  end;
 end;
 
-function UTF8GetCodePoint(const s:ansistring;CodeUnit:longint):longint;
+function UTF8GetCodePoint(const s:RawByteString;CodeUnit:longint):longint;
 var CurrentCodeUnit,Len:longint;
 begin
  if CodeUnit<1 then begin
@@ -2018,7 +2018,7 @@ begin
  end;
 end;
 
-function UTF8GetCodeUnit(const s:ansistring;CodePoint:longint):longint;
+function UTF8GetCodeUnit(const s:RawByteString;CodePoint:longint):longint;
 var CurrentCodePoint,Len:longint;
 begin
  if CodePoint<0 then begin
@@ -2034,7 +2034,7 @@ begin
  end;
 end;
 
-function UTF8CodeUnitGetChar(const s:ansistring;CodeUnit:longint):longword;
+function UTF8CodeUnitGetChar(const s:RawByteString;CodeUnit:longint):longword;
 var Value,CharClass,State:longword;
 begin
  result:=0;
@@ -2059,7 +2059,7 @@ begin
  end;
 end;
 
-function UTF8CodeUnitGetCharAndInc(const s:ansistring;var CodeUnit:longint):longword;
+function UTF8CodeUnitGetCharAndInc(const s:RawByteString;var CodeUnit:longint):longword;
 var Len:longint;
     Value,CharClass,State:longword;
 begin
@@ -2087,7 +2087,7 @@ begin
  end;
 end;
 
-function UTF8CodeUnitGetCharFallback(const s:ansistring;CodeUnit:longint):longword;
+function UTF8CodeUnitGetCharFallback(const s:RawByteString;CodeUnit:longint):longword;
 var Len:longint;
     StartCodeUnit,Value,CharClass,State:longword;
 begin
@@ -2116,7 +2116,7 @@ begin
  end;
 end;
 
-function UTF8CodeUnitGetCharAndIncFallback(const s:ansistring;var CodeUnit:longint):longword;
+function UTF8CodeUnitGetCharAndIncFallback(const s:RawByteString;var CodeUnit:longint):longword;
 var Len:longint;
     StartCodeUnit,Value,CharClass,State:longword;
 begin
@@ -2146,12 +2146,12 @@ begin
  end;
 end;
 
-function UTF8CodePointGetChar(const s:ansistring;CodePoint:longint;Fallback:boolean=false):longword;
+function UTF8CodePointGetChar(const s:RawByteString;CodePoint:longint;Fallback:boolean=false):longword;
 begin
  result:=UTF8CodeUnitGetChar(s,UTF8GetCodeUnit(s,CodePoint));
 end;
 
-function UTF8GetCharLen(const s:ansistring;i:longint):longword;
+function UTF8GetCharLen(const s:RawByteString;i:longint):longword;
 begin
  if (i>0) and (i<=length(s)) then begin
   result:=UTF8CharSteps[s[i]];
@@ -2160,7 +2160,7 @@ begin
  end;
 end;
 
-function UTF8Pos(const FindStr,InStr:ansistring):longint;
+function UTF8Pos(const FindStr,InStr:RawByteString):longint;
 var i,j,l:longint;
     ok:boolean;
 begin
@@ -2186,7 +2186,7 @@ begin
  end;
 end;
 
-function UTF8Copy(const Str:ansistring;Start,Len:longint):ansistring;
+function UTF8Copy(const Str:RawByteString;Start,Len:longint):RawByteString;
 var CodeUnit:longint;
 begin
  result:='';
@@ -2207,7 +2207,7 @@ begin
  end;
 end;
 
-const Entities:array[0..100,0..1] of ansistring=
+const Entities:array[0..100,0..1] of RawByteString=
        (('&quot;','&#34;'),('&amp;','&#38;'),('&lt;','&#60;'),('&gt;', '&#62;'),
         ('&nbsp;','&#160;'),('&iexcl;','&#161;'),('&cent;','&#162;'),
         ('&pound;','&#163;'),('&curren;','&#164;'),('&yen;','&#165;'),
@@ -2259,7 +2259,7 @@ const Entities:array[0..100,0..1] of ansistring=
         'Û','Ü','Ý','Þ','ß','à','á','â','ã','ä','å','æ','ç','è','é','ê','ë','ì','í',
         'î','ï','ð','ñ','ò','ó','ô','õ','ö','÷','ø','ù','ú','û','ü','ý','þ','ÿ');
 
-const EntityChars:array[1..102,1..2] of ansistring=(('&quot;',#34),('&amp;',#38),('&apos;',''''),
+const EntityChars:array[1..102,1..2] of RawByteString=(('&quot;',#34),('&amp;',#38),('&apos;',''''),
                                                     ('&lt;',#60),('&gt;',#62),('&euro;',#128),('&nbsp;',#160),('&iexcl;',#161),
                                                     ('&cent;',#162),('&pound;',#163),('&curren;',#164),('&yen;',#165),
                                                     ('&brvbar;',#166),('&sect;',#167),('&uml;',#168),('&copy;',#169),
@@ -2288,7 +2288,7 @@ const EntityChars:array[1..102,1..2] of ansistring=(('&quot;',#34),('&amp;',#38)
 
 type TEntitiesCharLookUpItem=record
       IsEntity:boolean;
-      Entity:ansistring;
+      Entity:RawByteString;
      end;
 
      TEntitiesCharLookUpTable=array[0..{$ifdef UNICODE}65535{$else}255{$endif}] of TEntitiesCharLookUpItem;
@@ -2317,7 +2317,7 @@ begin
  EntityInitialized:=false;
 end;
 
-function ConvertToEntities(AString:ansistring;IdentLevel:longint=0):ansistring;
+function ConvertToEntities(AString:RawByteString;IdentLevel:longint=0):RawByteString;
 var Counter,IdentCounter:longint;
     c:longword;
 begin
@@ -2354,10 +2354,10 @@ begin
  end;
 end;
 
-function ConvertEntities(s:ansistring;Charset:THTMLCharset):ansistring;
+function ConvertEntities(s:RawByteString;Charset:THTMLCharset):RawByteString;
 var i,j,d,c,EntityLength,EntityPosition:longint;
     IsItAnEntity:boolean;
-    Entity:ansistring;
+    Entity:RawByteString;
 begin
  result:=EncodeString(s,Charset,UTF_8);
  i:=pos(#13#10,result);
@@ -2440,10 +2440,10 @@ begin
  Finalize(Node);
 end;
 
-constructor THTML.Create(Input:ansistring;Charset:THTMLCharset=UTF_8);
+constructor THTML.Create(Input:RawByteString;Charset:THTMLCharset=UTF_8);
 var i,j:longint;
     c,tc:ansichar;
-    Text,TagName,ParameterName,ParameterValue:ansistring;
+    Text,TagName,ParameterName,ParameterValue:RawByteString;
     Stack:array of PHTMLNode;
     StackPointer:longint;
     IsCloseTag,IsAloneTag:boolean;
@@ -2756,20 +2756,20 @@ begin
  inherited Destroy;
 end;
 
-function THTML.GetPlainText:ansistring;
+function THTML.GetPlainText:RawByteString;
 var Charset:THTMLCharset;
- function Build(var Node:THTMLNode):ansistring;
+ function Build(var Node:THTMLNode):RawByteString;
  type TCellAlign=(caLEFT,caCENTER,caRIGHT);
       TCell=record
-       Text:ansistring;
+       Text:RawByteString;
        Align:TCellAlign;
       end;
  var i,j,k,h,w,x,y,xx:longint;
-     t,s1,s2:ansistring;
+     t,s1,s2:RawByteString;
      Cells:array of array of TCell;
      cw:array of longint;
      ch:array of longint;
-     Rows:array of ansistring;
+     Rows:array of RawByteString;
  begin
   case Node.NodeType of
    ntROOT:begin
@@ -3409,20 +3409,20 @@ begin
  result:=Build(RootNode);
 end;
 
-function THTML.GetMarkDown:ansistring;
+function THTML.GetMarkDown:RawByteString;
 var Charset:THTMLCharset;
- function Build(var Node:THTMLNode):ansistring;
+ function Build(var Node:THTMLNode):RawByteString;
  type TCellAlign=(caLEFT,caCENTER,caRIGHT);
       TCell=record
-       Text:ansistring;
+       Text:RawByteString;
        Align:TCellAlign;
       end;
  var i,j,k,h,w,x,y,xx:longint;
-     t,s1,s2:ansistring;
+     t,s1,s2:RawByteString;
      Cells:array of array of TCell;
      cw:array of longint;
      ch:array of longint;
-     Rows:array of ansistring;
+     Rows:array of RawByteString;
  begin
   case Node.NodeType of
    ntROOT:begin
@@ -4077,8 +4077,8 @@ begin
  result:=Build(RootNode);
 end;
 
-function THTML.GetHTML(AllowedTags:TStringList=nil):ansistring;
- function Build(var Node:THTMLNode):ansistring;
+function THTML.GetHTML(AllowedTags:TStringList=nil):RawByteString;
+ function Build(var Node:THTMLNode):RawByteString;
  var i:longint;
  begin
   case Node.NodeType of
@@ -4117,7 +4117,7 @@ begin
  result:=Build(RootNode);
 end;
 
-function MarkDownToHTML(const pInputText:ansistring):ansistring;
+function MarkDownToHTML(const pInputText:RawByteString):RawByteString;
 const tcaNone=0;
       tcaLeft=1;
       tcaRight=2;
@@ -4167,12 +4167,12 @@ type PMarkDownBlockType=^TMarkDownBlockType;
       Tail:PMarkDownBlock;
       Parent:PMarkDownBlock;
       BlockType:TMarkDownBlockType;
-      StringData:ansistring;
+      StringData:RawByteString;
       Tag:longint;
      end;
 var RootMarkDownBlock:PMarkDownBlock;
     LinkStringList:TStringList;
- function NewMarkDownBlock(const pParent:PMarkDownBlock;const pBlockType:TMarkDownBlockType;const pStringData:ansistring;const pTag:longint):PMarkDownBlock;
+ function NewMarkDownBlock(const pParent:PMarkDownBlock;const pBlockType:TMarkDownBlockType;const pStringData:RawByteString;const pTag:longint):PMarkDownBlock;
  begin
   GetMem(result,SizeOf(TMarkDownBlock));
   FillChar(result^,SizeOf(TMarkDownBlock),#0);
@@ -4203,7 +4203,7 @@ var RootMarkDownBlock:PMarkDownBlock;
   Finalize(pCurrentMarkDownBlock^);
   FreeMem(pCurrentMarkDownBlock);
  end;
- function CleanText(const pInputText:ansistring):ansistring;
+ function CleanText(const pInputText:RawByteString):RawByteString;
  var InputPosition,InputLength,OutputPosition,LineBegin,TabCounter,LineLength:longint;
      LineHasContent:boolean;
  begin
@@ -4290,7 +4290,7 @@ var RootMarkDownBlock:PMarkDownBlock;
    SetLength(result,OutputPosition);
   end;
  end;
- function CleanNewLines(pInputText:ansistring):ansistring;
+ function CleanNewLines(pInputText:RawByteString):RawByteString;
  var InputPosition,InputLength,OutputPosition:longint;
  begin
   result:='';
@@ -4329,7 +4329,7 @@ var RootMarkDownBlock:PMarkDownBlock;
    SetLength(result,OutputPosition);
   end;
  end;
- function IsHeaderLine(const pInputText:ansistring;const pInputFromPosition,pInputToPosition:longint):longint;
+ function IsHeaderLine(const pInputText:RawByteString;const pInputFromPosition,pInputToPosition:longint):longint;
  var InputPosition:longint;
  begin
   result:=0;
@@ -4367,7 +4367,7 @@ var RootMarkDownBlock:PMarkDownBlock;
    end;
   end;
  end;
- function IsNextHeaderLine(const pInputText:ansistring;const pInputFromPosition,pInputToPosition:longint):longint;
+ function IsNextHeaderLine(const pInputText:RawByteString;const pInputFromPosition,pInputToPosition:longint):longint;
  var InputPosition:longint;
  begin
   result:=0;
@@ -4381,7 +4381,7 @@ var RootMarkDownBlock:PMarkDownBlock;
    end;
   end;
  end;
- function FindEmphasisChar(const pInputText:ansistring;const pInputFromPosition,pInputToPosition:longint;const pEmphasisChar:ansichar):longint;
+ function FindEmphasisChar(const pInputText:RawByteString;const pInputFromPosition,pInputToPosition:longint;const pEmphasisChar:ansichar):longint;
  var InputPosition,OpenCount,CloseCount,TempResult:longint;
      CloseChar:ansichar;
  begin
@@ -4491,8 +4491,8 @@ var RootMarkDownBlock:PMarkDownBlock;
    end;
   end;
  end;
- function ParseInline(const pParentMarkDownBlock:PMarkDownBlock;const pInputText:ansistring;const pInputFromPosition,pInputToPosition:longint):longint; forward;
- function ParseEmphasis1(const pParentMarkDownBlock:PMarkDownBlock;const pInputText:ansistring;const pInputFromPosition,pInputToPosition:longint;const pEmphasisChar:ansichar):longint;
+ function ParseInline(const pParentMarkDownBlock:PMarkDownBlock;const pInputText:RawByteString;const pInputFromPosition,pInputToPosition:longint):longint; forward;
+ function ParseEmphasis1(const pParentMarkDownBlock:PMarkDownBlock;const pInputText:RawByteString;const pInputFromPosition,pInputToPosition:longint;const pEmphasisChar:ansichar):longint;
  var InputPosition,TempPosition:longint;
      MarkDownBlock:PMarkDownBlock;
  begin
@@ -4522,7 +4522,7 @@ var RootMarkDownBlock:PMarkDownBlock;
    break;
   end;
  end;
- function ParseEmphasis2(const pParentMarkDownBlock:PMarkDownBlock;const pInputText:ansistring;const pInputFromPosition,pInputToPosition:longint;const pEmphasisChar:ansichar):longint;
+ function ParseEmphasis2(const pParentMarkDownBlock:PMarkDownBlock;const pInputText:RawByteString;const pInputFromPosition,pInputToPosition:longint;const pEmphasisChar:ansichar):longint;
  var InputPosition,TempPosition:longint;
      MarkDownBlock:PMarkDownBlock;
  begin
@@ -4557,7 +4557,7 @@ var RootMarkDownBlock:PMarkDownBlock;
    end;
   end;
  end;
- function ParseEmphasis3(const pParentMarkDownBlock:PMarkDownBlock;const pInputText:ansistring;const pInputFromPosition,pInputToPosition:longint;const pEmphasisChar:ansichar):longint;
+ function ParseEmphasis3(const pParentMarkDownBlock:PMarkDownBlock;const pInputText:RawByteString;const pInputFromPosition,pInputToPosition:longint;const pEmphasisChar:ansichar):longint;
  var InputPosition,EndPosition:longint;
      MarkDownBlock:PMarkDownBlock;
  begin
@@ -4589,10 +4589,10 @@ var RootMarkDownBlock:PMarkDownBlock;
    end;
   end;
  end;
- function ParseInline(const pParentMarkDownBlock:PMarkDownBlock;const pInputText:ansistring;const pInputFromPosition,pInputToPosition:longint):longint;
+ function ParseInline(const pParentMarkDownBlock:PMarkDownBlock;const pInputText:RawByteString;const pInputFromPosition,pInputToPosition:longint):longint;
  var InputPosition,EndPosition,TempPosition,NewPosition,Count,StartPosition,StopPosition,TempIndex:longint;
      MarkDownBlock:PMarkDownBlock;
-     BlockText,LinkText,Link:ansistring;
+     BlockText,LinkText,Link:RawByteString;
      EmphasisChar:ansichar;
      IsImage,OK:boolean;
  begin
@@ -5132,8 +5132,8 @@ var RootMarkDownBlock:PMarkDownBlock;
    break;
   end;
  end;
- function ParseBlock(const pParentMarkDownBlock:PMarkDownBlock;const pInputText:ansistring;const pInputFromPosition,pInputToPosition:longint):longint; forward;
- function IsFencedCode(const pInputText:ansistring;const pInputFromPosition,pInputToPosition:longint):boolean;
+ function ParseBlock(const pParentMarkDownBlock:PMarkDownBlock;const pInputText:RawByteString;const pInputFromPosition,pInputToPosition:longint):longint; forward;
+ function IsFencedCode(const pInputText:RawByteString;const pInputFromPosition,pInputToPosition:longint):boolean;
  var InputPosition,TempPosition,TempCount:longint;
      FencedCodeChar:ansichar;
  begin
@@ -5174,7 +5174,7 @@ var RootMarkDownBlock:PMarkDownBlock;
    end;
   end;
  end;
- function ParseFencedCode(const pParentMarkDownBlock:PMarkDownBlock;const pInputText:ansistring;const pInputFromPosition,pInputToPosition:longint):longint;
+ function ParseFencedCode(const pParentMarkDownBlock:PMarkDownBlock;const pInputText:RawByteString;const pInputFromPosition,pInputToPosition:longint):longint;
  var InputPosition,TempPosition,TempCount,StartPosition,StopPosition,OtherTempCount,BlockStart,BlockEnd:longint;
      FencedCodeChar:ansichar;
  begin
@@ -5275,9 +5275,9 @@ var RootMarkDownBlock:PMarkDownBlock;
    end;
   end;
  end;
- function ParseHTMLBlock(const pParentMarkDownBlock:PMarkDownBlock;const pInputText:ansistring;const pInputFromPosition,pInputToPosition:longint):longint;
+ function ParseHTMLBlock(const pParentMarkDownBlock:PMarkDownBlock;const pInputText:RawByteString;const pInputFromPosition,pInputToPosition:longint):longint;
  var InputPosition,Indentation,Count,StartPosition,TagDepth:longint;
-     Tag:ansistring;
+     Tag:RawByteString;
  begin
   result:=0;
   InputPosition:=pInputFromPosition;
@@ -5442,7 +5442,7 @@ var RootMarkDownBlock:PMarkDownBlock;
    end;
   end;
  end;
- function ParseTable(const pParentMarkDownBlock:PMarkDownBlock;const pInputText:ansistring;const pInputFromPosition,pInputToPosition:longint):longint;
+ function ParseTable(const pParentMarkDownBlock:PMarkDownBlock;const pInputText:RawByteString;const pInputFromPosition,pInputToPosition:longint):longint;
  type PColumnAlignment=^TColumnAlignment;
       TColumnAlignment=longint;
       PColumn=^TColumn;
@@ -5456,7 +5456,7 @@ var RootMarkDownBlock:PMarkDownBlock;
      Column:PColumn;
      TableMarkDownBlock:PMarkDownBlock;
      WithHeader:boolean;
-  function ParseTableRow(const pTableMarkDownBlock:PMarkDownBlock;const pInputText:ansistring;const pInputFromPosition,pInputToPosition:longint;const pIsHeader:boolean):boolean;
+  function ParseTableRow(const pTableMarkDownBlock:PMarkDownBlock;const pInputText:RawByteString;const pInputFromPosition,pInputToPosition:longint;const pIsHeader:boolean):boolean;
   type PColumnDataItem=^TColumnDataItem;
        TColumnDataItem=record
         StartPosition,StopPosition:longint;
@@ -5661,7 +5661,7 @@ var RootMarkDownBlock:PMarkDownBlock;
    end;
   end;
  end;
- function CheckListItem(const pInputText:ansistring;const pInputFromPosition,pInputToPosition:longint):longint;
+ function CheckListItem(const pInputText:RawByteString;const pInputFromPosition,pInputToPosition:longint):longint;
  var InputPosition,Indentation:longint;
      IsOrdered:boolean;
  begin
@@ -5708,10 +5708,10 @@ var RootMarkDownBlock:PMarkDownBlock;
    end;
   end;
  end;
- function IsHorizontalRule(const pInputText:ansistring;const pInputFromPosition,pInputToPosition:longint):boolean; forward;
- function ParseListItem(const pParentMarkDownBlock:PMarkDownBlock;var pListParentMarkDownBlock:PMarkDownBlock;const pInputText:ansistring;const pInputFromPosition,pInputToPosition:longint;out pLineEnd:boolean):longint;
+ function IsHorizontalRule(const pInputText:RawByteString;const pInputFromPosition,pInputToPosition:longint):boolean; forward;
+ function ParseListItem(const pParentMarkDownBlock:PMarkDownBlock;var pListParentMarkDownBlock:PMarkDownBlock;const pInputText:RawByteString;const pInputFromPosition,pInputToPosition:longint;out pLineEnd:boolean):longint;
  var InputPosition,Indentation,NewIndentation,StartPosition,StopPosition,NextPosition,ListKind,NewListKind,TempIndex:longint;
-     InlineText,BlockText:ansistring;
+     InlineText,BlockText:RawByteString;
      InEmpty,EmptyLine,HasInsideEmpty,ToBlockText,InFencedCodeBlock:boolean;
      ListItemMarkDownBlock:PMarkDownBlock;
  begin
@@ -5915,7 +5915,7 @@ var RootMarkDownBlock:PMarkDownBlock;
    end;
   end;
  end;
- function ParseList(const pParentMarkDownBlock:PMarkDownBlock;const pInputText:ansistring;const pInputFromPosition,pInputToPosition:longint):longint;
+ function ParseList(const pParentMarkDownBlock:PMarkDownBlock;const pInputText:RawByteString;const pInputFromPosition,pInputToPosition:longint):longint;
  var InputPosition,NewPosition:longint;
      ListMarkDownBlock:PMarkDownBlock;
      LineEnd:boolean;
@@ -5940,11 +5940,11 @@ var RootMarkDownBlock:PMarkDownBlock;
    end;
   end;
  end;
- function ParseCodeBlock(const pParentMarkDownBlock:PMarkDownBlock;const pInputText:ansistring;const pInputFromPosition,pInputToPosition,pIndentation:longint):longint;
+ function ParseCodeBlock(const pParentMarkDownBlock:PMarkDownBlock;const pInputText:RawByteString;const pInputFromPosition,pInputToPosition,pIndentation:longint):longint;
  const Indentation=4;
  var InputPosition,TempPosition,BlockTextSize,TempIndentation:longint;
      MarkDownBlock:PMarkDownBlock;
-     BlockText:ansistring;
+     BlockText:RawByteString;
  begin
   result:=0;
   InputPosition:=pInputFromPosition;
@@ -6004,7 +6004,7 @@ var RootMarkDownBlock:PMarkDownBlock;
    result:=InputPosition;
   end;
  end;
- function IsBlockQuote(const pInputText:ansistring;const pInputFromPosition,pInputToPosition:longint):boolean;
+ function IsBlockQuote(const pInputText:RawByteString;const pInputFromPosition,pInputToPosition:longint):boolean;
  var InputPosition:longint;
  begin
   result:=false;
@@ -6024,10 +6024,10 @@ var RootMarkDownBlock:PMarkDownBlock;
    end;
   end;
  end;
- function ParseBlockQuote(const pParentMarkDownBlock:PMarkDownBlock;const pInputText:ansistring;const pInputFromPosition,pInputToPosition:longint):longint;
+ function ParseBlockQuote(const pParentMarkDownBlock:PMarkDownBlock;const pInputText:RawByteString;const pInputFromPosition,pInputToPosition:longint):longint;
  var InputPosition,TempPosition,BlockTextSize:longint;
      MarkDownBlock:PMarkDownBlock;
-     BlockText:ansistring;
+     BlockText:RawByteString;
  begin
   result:=0;
   InputPosition:=pInputFromPosition;
@@ -6093,7 +6093,7 @@ var RootMarkDownBlock:PMarkDownBlock;
    end;
   end;
  end;
- function IsATXHeader(const pInputText:ansistring;const pInputFromPosition,pInputToPosition:longint):boolean;
+ function IsATXHeader(const pInputText:RawByteString;const pInputFromPosition,pInputToPosition:longint):boolean;
  var InputPosition,TempPosition,TempCount,StartPosition:longint;
  begin
   result:=false;
@@ -6119,10 +6119,10 @@ var RootMarkDownBlock:PMarkDownBlock;
    end;
   end;
  end;
- function ParseATXHeader(const pParentMarkDownBlock:PMarkDownBlock;const pInputText:ansistring;const pInputFromPosition,pInputToPosition:longint):longint;
+ function ParseATXHeader(const pParentMarkDownBlock:PMarkDownBlock;const pInputText:RawByteString;const pInputFromPosition,pInputToPosition:longint):longint;
  var InputPosition,TempPosition,TempCount,StartPosition,TempIndex,OtherTempIndex:longint;
      MarkDownBlock:PMarkDownBlock;
-     BlockText:ansistring;
+     BlockText:RawByteString;
  begin
   result:=0;
   InputPosition:=pInputFromPosition;
@@ -6177,7 +6177,7 @@ var RootMarkDownBlock:PMarkDownBlock;
    end;
   end;
  end;
- function IsHorizontalRule(const pInputText:ansistring;const pInputFromPosition,pInputToPosition:longint):boolean;
+ function IsHorizontalRule(const pInputText:RawByteString;const pInputFromPosition,pInputToPosition:longint):boolean;
  var InputPosition,TempPosition,TempCount:longint;
      HorizontalRuleChar:ansichar;
  begin
@@ -6218,7 +6218,7 @@ var RootMarkDownBlock:PMarkDownBlock;
    end;
   end;
  end;
- function ParseHorizontalRule(const pParentMarkDownBlock:PMarkDownBlock;const pInputText:ansistring;const pInputFromPosition,pInputToPosition:longint):longint;
+ function ParseHorizontalRule(const pParentMarkDownBlock:PMarkDownBlock;const pInputText:RawByteString;const pInputFromPosition,pInputToPosition:longint):longint;
  var InputPosition,TempPosition,TempCount:longint;
      MarkDownBlock:PMarkDownBlock;
      HorizontalRuleChar:ansichar;
@@ -6257,7 +6257,7 @@ var RootMarkDownBlock:PMarkDownBlock;
    end;
   end;
  end;
- function ParseParagraph(const pParentMarkDownBlock:PMarkDownBlock;const pInputText:ansistring;const pInputFromPosition,pInputToPosition:longint):longint;
+ function ParseParagraph(const pParentMarkDownBlock:PMarkDownBlock;const pInputText:RawByteString;const pInputFromPosition,pInputToPosition:longint):longint;
  var InputPosition,EndPosition,TempPosition,Level:longint;
      EmptyLine:boolean;
      ParagraphMarkDownBlock:PMarkDownBlock;
@@ -6339,7 +6339,7 @@ var RootMarkDownBlock:PMarkDownBlock;
   result:=EndPosition;
 
  end;
- function ParseBlock(const pParentMarkDownBlock:PMarkDownBlock;const pInputText:ansistring;const pInputFromPosition,pInputToPosition:longint):longint;
+ function ParseBlock(const pParentMarkDownBlock:PMarkDownBlock;const pInputText:RawByteString;const pInputFromPosition,pInputToPosition:longint):longint;
  var InputPosition,TempPosition,NewPosition,StartPosition,Indentation:longint;
  begin
   result:=0;
@@ -6470,7 +6470,7 @@ var RootMarkDownBlock:PMarkDownBlock;
 
   end;
  end;
- function EscapeHTML(const pInputText:ansistring):ansistring;
+ function EscapeHTML(const pInputText:RawByteString):RawByteString;
  var InputPosition,InputLength,OutputPosition:longint;
  begin
   result:='';
@@ -6568,7 +6568,7 @@ var RootMarkDownBlock:PMarkDownBlock;
    SetLength(result,OutputPosition);
   end;
  end;
- function ProcessMarkDownBlock(const pCurrentMarkDownBlock:PMarkDownBlock):ansistring;
+ function ProcessMarkDownBlock(const pCurrentMarkDownBlock:PMarkDownBlock):RawByteString;
  var CurrentMarkDownBlock,NextMarkDownBlock:PMarkDownBlock;
  begin
   case pCurrentMarkDownBlock^.BlockType of
@@ -6818,7 +6818,7 @@ var RootMarkDownBlock:PMarkDownBlock;
    end;
   end;
  end;
-var InputText:ansistring;
+var InputText:RawByteString;
 begin
  GetMem(RootMarkDownBlock,SizeOf(TMarkDownBlock));
  try
