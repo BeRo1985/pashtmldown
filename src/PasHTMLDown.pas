@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                PasHTMLDown Libary                          *
  ******************************************************************************
- *                        Version 2025-08-30-04-58-0000                       *
+ *                        Version 2025-08-30-18-56-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -316,7 +316,11 @@ interface
 
 uses Classes,SysUtils;
 
-type THTML=class
+type
+
+{ THTML }
+
+ THTML=class
       public
 
        type TCharset=
@@ -426,11 +430,12 @@ type THTML=class
        fRootNode:TNode;
 
       public
-       constructor Create(Input:RawByteString;Charset:TCharset=TCharset.UTF_8);
+       constructor Create(aInput:RawByteString;aCharset:TCharset=TCharset.UTF_8); overload;
+       constructor Create(const aRootNode:TNode); overload;
        destructor Destroy; override;
        function GetPlainText:RawByteString;
        function GetMarkDown:RawByteString;
-       function GetHTML(AllowedTags:TStringList=nil):RawByteString;
+       function GetHTML(aAllowedTags:TStringList=nil):RawByteString;
       published 
        property RootNode:TNode read fRootNode;
      end;
@@ -438,7 +443,7 @@ type THTML=class
      TMarkdown=class
       public
 
-       type TNodeType=
+       type TNodeType_=
              (
               Root,
               BlankLine,
@@ -473,6 +478,7 @@ type THTML=class
               HTMLComment,
               LinkReferenceDefinition
              );
+            TNodeType=TNodeType_;
 
             TNode=class;
 
@@ -518,7 +524,8 @@ type THTML=class
        function CleanText(const aInputText:RawByteString):RawByteString;
        function CleanNewLines(aInputText:RawByteString):RawByteString;
        function EscapeHTML(const aInputText:RawByteString):RawByteString;
-       function ProcessMarkDownBlock(const aCurrentMarkDownBlock:TNode):RawByteString;
+       function ProcessMarkDownBlockHTML(const aCurrentMarkDownBlock:TNode):RawByteString;
+       function ProcessMarkDownBlockHTMLNode(const aCurrentMarkDownBlock:TNode):THTML.TNode;
        function ParseBlock(const aParentMarkDownBlock:TNode;const aInputText:RawByteString;const aInputFromPosition,aInputToPosition:longint):longint;
        function ParseBlockQuote(const aParentMarkDownBlock:TNode;const aInputText:RawByteString;const aInputFromPosition,aInputToPosition:longint):longint;
        function ParseCodeBlock(const aParentMarkDownBlock:TNode;const aInputText:RawByteString;const aInputFromPosition,aInputToPosition:longint;const aIndentation:longint):longint;
@@ -2876,7 +2883,7 @@ begin
 end;
 
 
-constructor THTML.Create(Input:RawByteString;Charset:TCharset);
+constructor THTML.Create(aInput:RawByteString;aCharset:TCharset);
 type TParameter=record
       Name,Value:RawByteString;
      end;
@@ -2894,7 +2901,7 @@ var i,j:longint;
  begin
   if (length(trim(Text))>0) and (StackPointer>=0) and (StackPointer<length(Stack)) then begin
    StackNode:=Stack[StackPointer];
-   TextNode:=TNode.Create(TNodeType.Text,'',ConvertEntities(Text,TCharset(Charset)));
+   TextNode:=TNode.Create(TNodeType.Text,'',ConvertEntities(Text,TCharset(aCharset)));
    StackNode.AddChild(TextNode);
   end;
   Text:='';
@@ -3000,9 +3007,9 @@ begin
  inherited Create;
  fRootNode:=TNode.Create(TNodeType.Root,'','');
  try
-  if Charset in [TCharset.UCS_2,TCharset.UCS_4] then begin
-   Input:=EncodeString(Input,Charset,TCharset.UTF_8);
-   Charset:=TCharset.UTF_8;
+  if aCharset in [TCharset.UCS_2,TCharset.UCS_4] then begin
+   aInput:=EncodeString(aInput,aCharset,TCharset.UTF_8);
+   aCharset:=TCharset.UTF_8;
   end;
   ParamCount:=0;
   SetLength(Stack,1);
@@ -3013,41 +3020,41 @@ begin
   ParameterName:='';
   ParameterValue:='';
   i:=1;
-  while i<=length(Input) do begin
-   c:=Input[i];
+  while i<=length(aInput) do begin
+   c:=aInput[i];
    inc(i);
    if c='<' then begin
     IsAloneTag:=false;
     if length(Text)>0 then begin
      FlushText;
     end;
-    if ((i+2)<=length(Input)) and ((Input[i]='!') and (Input[i+1]='-') and (Input[i+2]='-')) then begin
+    if ((i+2)<=length(aInput)) and ((aInput[i]='!') and (aInput[i+1]='-') and (aInput[i+2]='-')) then begin
      inc(i,3);
-     while i<=length(Input) do begin
-      if ((i+2)<=length(Input)) and ((Input[i]='-') and (Input[i+1]='-') and (Input[i+2]='>')) then begin
+     while i<=length(aInput) do begin
+      if ((i+2)<=length(aInput)) and ((aInput[i]='-') and (aInput[i+1]='-') and (aInput[i+2]='>')) then begin
        inc(i,3);
        break;
       end else begin
        inc(i);
       end;
      end;
-    end else if (i<=length(Input)) and (Input[i] in ['!','?','&','%']) then begin
-     while (i<=length(Input)) and (Input[i]<>'>') do begin
+    end else if (i<=length(aInput)) and (aInput[i] in ['!','?','&','%']) then begin
+     while (i<=length(aInput)) and (aInput[i]<>'>') do begin
       inc(i);
      end;
-     if (i<=length(Input)) and (Input[i]='>') then begin
+     if (i<=length(aInput)) and (aInput[i]='>') then begin
       inc(i);
      end;
     end else begin
-     if (i<=length(Input)) and (Input[i]='/') then begin
+     if (i<=length(aInput)) and (aInput[i]='/') then begin
       IsCloseTag:=true;
       inc(i);
      end else begin
       IsCloseTag:=false;
      end;
      TagName:='';
-     while i<=length(Input) do begin
-      c:=Input[i];
+     while i<=length(aInput) do begin
+      c:=aInput[i];
       case c of
        'a'..'z','A'..'Z','0'..'9','-':begin
         TagName:=TagName+upcase(c);
@@ -3059,12 +3066,12 @@ begin
       end;
      end;
      ParamCount:=0;
-     while i<=length(Input) do begin
-      while (i<=length(Input)) and (Input[i] in [#0..#32]) do begin
+     while i<=length(aInput) do begin
+      while (i<=length(aInput)) and (aInput[i] in [#0..#32]) do begin
        inc(i);
       end;
-      if i<=length(Input) then begin
-       c:=Input[i];
+      if i<=length(aInput) then begin
+       c:=aInput[i];
        case c of
         '/':begin
          IsAloneTag:=true;
@@ -3077,8 +3084,8 @@ begin
         'a'..'z','A'..'Z','0'..'9','-':begin
          ParameterName:='';
          ParameterValue:='';
-         while i<=length(Input) do begin
-          c:=Input[i];
+         while i<=length(aInput) do begin
+          c:=aInput[i];
           case c of
            'a'..'z','A'..'Z','0'..'9','-':begin
             ParameterName:=ParameterName+upcase(c);
@@ -3089,25 +3096,25 @@ begin
            end;
           end;
          end;
-         while (i<=length(Input)) and (Input[i] in [#0..#32]) do begin
+         while (i<=length(aInput)) and (aInput[i] in [#0..#32]) do begin
           inc(i);
          end;
-         if (i<=length(Input)) and (Input[i]='=') then begin
+         if (i<=length(aInput)) and (aInput[i]='=') then begin
           inc(i);
-          while (i<=length(Input)) and (Input[i] in [#0..#32]) do begin
+          while (i<=length(aInput)) and (aInput[i] in [#0..#32]) do begin
            inc(i);
           end;
-          if (i<=length(Input)) and (Input[i] in ['''','"']) then begin
-           tc:=Input[i];
+          if (i<=length(aInput)) and (aInput[i] in ['''','"']) then begin
+           tc:=aInput[i];
            inc(i);
-           while i<=length(Input) do begin
-            c:=Input[i];
+           while i<=length(aInput) do begin
+            c:=aInput[i];
             if c=tc then begin
              break;
             end else if c='\' then begin
              inc(i);
-             if i<=length(Input) then begin
-              c:=Input[i];
+             if i<=length(aInput) then begin
+              c:=aInput[i];
               inc(i);
               case c of
                '''','"':begin
@@ -3136,8 +3143,8 @@ begin
             end;
            end;
           end else begin
-           while i<=length(Input) do begin
-            c:=Input[i];
+           while i<=length(aInput) do begin
+            c:=aInput[i];
             case c of
              #0..#32:begin
               break;
@@ -3194,6 +3201,12 @@ begin
   end;
   raise;
  end;
+end;
+
+constructor THTML.Create(const aRootNode:TNode);
+begin
+ inherited Create;
+ fRootNode:=aRootNode;
 end;
 
 destructor THTML.Destroy;
@@ -4525,7 +4538,7 @@ begin
  result:=Build(RootNode);
 end;
 
-function THTML.GetHTML(AllowedTags:TStringList=nil):RawByteString;
+function THTML.GetHTML(aAllowedTags:TStringList=nil):RawByteString;
  function Build(const Node:TNode):RawByteString;
  var i:longint;
  begin
@@ -4537,7 +4550,7 @@ function THTML.GetHTML(AllowedTags:TStringList=nil):RawByteString;
     end;
    end;
    TNodeType.Tag:begin
-    if (AllowedTags=nil) or (AllowedTags.IndexOf(LowerCase(Node.TagName))>=0) then begin
+    if (aAllowedTags=nil) or (aAllowedTags.IndexOf(LowerCase(Node.TagName))>=0) then begin
      result:='<'+LowerCase(Node.TagName);
      for i:=0 to Node.TagParameters.Count-1 do begin
       result:=result+' '+LowerCase(Node.TagParameters[i].Name)+'="'+ConvertToEntities(Node.TagParameters[i].Value)+'"';
@@ -4657,10 +4670,8 @@ begin
 end;
 
 function TMarkdown.GetHTML:THTML;
-var HtmlString:RawByteString;
 begin
- HtmlString:=ProcessMarkDownBlock(fRootNode);
- result:=THTML.Create(HtmlString,THTML.TCharset.UTF_8);
+ result:=THTML.Create(ProcessMarkDownBlockHTMLNode(fRootNode));
 end;
 
 function TMarkdown.NewMarkDownBlock(const aParent:TNode;const aBlockType:TNodeType;const aStringData:RawByteString;const aTag:longint):TNode;
@@ -4898,7 +4909,7 @@ begin
  end;
 end;
 
-function TMarkdown.ProcessMarkDownBlock(const aCurrentMarkDownBlock:TNode):RawByteString;
+function TMarkdown.ProcessMarkDownBlockHTML(const aCurrentMarkDownBlock:TNode):RawByteString;
 const tcaNone=0;
       tcaLeft=1;
       tcaRight=2;
@@ -5055,7 +5066,7 @@ begin
  end;
  for i:=0 to aCurrentMarkDownBlock.Children.Count-1 do begin
   CurrentMarkDownBlock:=aCurrentMarkDownBlock.Children[i];
-  result:=result+ProcessMarkDownBlock(CurrentMarkDownBlock);
+  result:=result+ProcessMarkDownBlockHTML(CurrentMarkDownBlock);
  end;
  case aCurrentMarkDownBlock.BlockType of
   TMarkdown.TNodeType.Root:begin
@@ -5155,6 +5166,186 @@ begin
   TMarkdown.TNodeType.LinkReferenceDefinition:begin
   end;
  end;
+end;
+
+function TMarkdown.ProcessMarkDownBlockHTMLNode(const aCurrentMarkDownBlock:TNode):THTML.TNode;
+const tcaNone=0;
+      tcaLeft=1;
+      tcaRight=2;
+      tcaCenter=3;
+      tfHeader=4;
+var Index:longint;
+    CurrentMarkDownBlock:TNode;
+    ChildNode:THTML.TNode;
+begin
+ case aCurrentMarkDownBlock.BlockType of
+  TMarkdown.TNodeType.Root:begin
+   result:=THTML.TNode.Create(THTML.TNodeType.Root);
+  end;
+  TMarkdown.TNodeType.BlankLine:begin
+   result:=nil;
+   exit;
+  end;
+  TMarkdown.TNodeType.Text:begin
+   result:=THTML.TNode.Create(THTML.TNodeType.Text,'',EscapeHTML(aCurrentMarkDownBlock.StringData));
+   exit;
+  end;
+  TMarkdown.TNodeType.Entity:begin
+   result:=THTML.TNode.Create(THTML.TNodeType.Text,'',aCurrentMarkDownBlock.StringData);
+   exit;
+  end;
+  TMarkdown.TNodeType.HTMLTag:begin
+   result:=THTML.TNode.Create(THTML.TNodeType.Text,'',aCurrentMarkDownBlock.StringData);
+   exit;
+  end;
+  TMarkdown.TNodeType.WebLink:begin
+   result:=THTML.TNode.Create(THTML.TNodeType.Tag,'a');
+   result.AddTagParameter('href',EscapeHTML(aCurrentMarkDownBlock.StringData));
+   result.AddChild(THTML.TNode.Create(THTML.TNodeType.Text,'',EscapeHTML(aCurrentMarkDownBlock.StringData)));
+   exit;
+  end;
+  TMarkdown.TNodeType.Subscript:begin
+   result:=THTML.TNode.Create(THTML.TNodeType.Tag,'sup');
+  end;
+  TMarkdown.TNodeType.Link:begin
+   result:=THTML.TNode.Create(THTML.TNodeType.Tag,'a');
+   result.AddTagParameter('href',EscapeHTML(aCurrentMarkDownBlock.StringData));
+  end;
+  TMarkdown.TNodeType.Image:begin
+   result:=THTML.TNode.Create(THTML.TNodeType.Tag,'img');
+   result.AddTagParameter('src',EscapeHTML(aCurrentMarkDownBlock.StringData));
+   result.AddTagParameter('alt','');
+  end;
+  TMarkdown.TNodeType.ReferenceLink:begin
+   result:=THTML.TNode.Create(THTML.TNodeType.Tag,'a');
+   result.AddTagParameter('href',EscapeHTML(fLinkStringList.Values[LowerCase(Trim(aCurrentMarkDownBlock.StringData))]));
+  end;
+  TMarkdown.TNodeType.ReferenceImage:begin
+   result:=THTML.TNode.Create(THTML.TNodeType.Tag,'img');
+   result.AddTagParameter('src',EscapeHTML(fLinkStringList.Values[LowerCase(Trim(aCurrentMarkDownBlock.StringData))]));
+   result.AddTagParameter('alt','');
+  end;
+  TMarkdown.TNodeType.LineBreak:begin
+   result:=THTML.TNode.Create(THTML.TNodeType.Tag,'br');
+   exit;
+  end;
+  TMarkdown.TNodeType.Emphasis:begin
+   case aCurrentMarkDownBlock.Tag of
+    1:begin
+     result:=THTML.TNode.Create(THTML.TNodeType.Tag,'em');
+    end;
+    2:begin
+     result:=THTML.TNode.Create(THTML.TNodeType.Tag,'strong');
+    end;
+    3:begin
+     result:=THTML.TNode.Create(THTML.TNodeType.Tag,'strong');
+    end;
+    else begin
+     result:=nil;
+     exit;
+    end;
+   end;
+  end;
+  TMarkdown.TNodeType.Strikethrough:begin
+   result:=THTML.TNode.Create(THTML.TNodeType.Tag,'del');
+  end;
+  TMarkdown.TNodeType.ATXHeader:begin
+   result:=THTML.TNode.Create(THTML.TNodeType.Tag,'h'+IntToStr(aCurrentMarkDownBlock.Tag));
+  end;
+  TMarkdown.TNodeType.HorizontalRule:begin
+   result:=THTML.TNode.Create(THTML.TNodeType.Tag,'hr');
+   exit;
+  end;
+  TMarkdown.TNodeType.Highlight:begin
+   result:=THTML.TNode.Create(THTML.TNodeType.Tag,'mark');
+  end;
+  TMarkdown.TNodeType.Paragraph:begin
+   result:=THTML.TNode.Create(THTML.TNodeType.Tag,'p');
+  end;
+  TMarkdown.TNodeType.SETextHeader:begin
+   result:=THTML.TNode.Create(THTML.TNodeType.Tag,'h'+IntToStr(aCurrentMarkDownBlock.Tag));
+  end;
+  TMarkdown.TNodeType.CodeBlock:begin
+   result:=THTML.TNode.Create(THTML.TNodeType.Tag,'pre');
+   result.AddChild(THTML.TNode.Create(THTML.TNodeType.Text,'',EscapeHTML(aCurrentMarkDownBlock.StringData)));
+   exit;
+  end;
+  TMarkdown.TNodeType.FencedCodeBlock:begin
+   result:=THTML.TNode.Create(THTML.TNodeType.Tag,'pre');
+   result.AddChild(THTML.TNode.Create(THTML.TNodeType.Text,'',EscapeHTML(aCurrentMarkDownBlock.StringData)));
+   exit;
+  end;
+  TMarkdown.TNodeType.CodeSpan:begin
+   result:=THTML.TNode.Create(THTML.TNodeType.Tag,'code');
+   result.AddChild(THTML.TNode.Create(THTML.TNodeType.Text,'',EscapeHTML(aCurrentMarkDownBlock.StringData)));
+   exit;
+  end;
+  TMarkdown.TNodeType.BlockQuote:begin
+   result:=THTML.TNode.Create(THTML.TNodeType.Tag,'blockquote');
+  end;
+  TMarkdown.TNodeType.UnorderedList:begin
+   result:=THTML.TNode.Create(THTML.TNodeType.Tag,'ul');
+  end;
+  TMarkdown.TNodeType.OrderedList:begin
+   result:=THTML.TNode.Create(THTML.TNodeType.Tag,'ol');
+  end;
+  TMarkdown.TNodeType.ListItem:begin
+   result:=THTML.TNode.Create(THTML.TNodeType.Tag,'li');
+  end;
+  TMarkdown.TNodeType.Table:begin
+   result:=THTML.TNode.Create(THTML.TNodeType.Tag,'table');
+  end;
+  TMarkdown.TNodeType.TableRow:begin
+   result:=THTML.TNode.Create(THTML.TNodeType.Tag,'tr');
+  end;
+  TMarkdown.TNodeType.TableCell:begin
+   if (aCurrentMarkDownBlock.Tag and tfHeader)<>0 then begin
+    result:=THTML.TNode.Create(THTML.TNodeType.Tag,'th');
+    if (aCurrentMarkDownBlock.Tag and (tcaLeft or tcaRight))=(tcaLeft or tcaRight) then begin
+     result.AddTagParameter('align','center');
+    end else if (aCurrentMarkDownBlock.Tag and tcaLeft)<>0 then begin
+     result.AddTagParameter('align','left');
+    end else if (aCurrentMarkDownBlock.Tag and tcaRight)<>0 then begin
+     result.AddTagParameter('align','right');
+    end;
+   end else begin
+    result:=THTML.TNode.Create(THTML.TNodeType.Tag,'td');
+    if (aCurrentMarkDownBlock.Tag and (tcaLeft or tcaRight))=(tcaLeft or tcaRight) then begin
+     result.AddTagParameter('align','center');
+    end else if (aCurrentMarkDownBlock.Tag and tcaLeft)<>0 then begin
+     result.AddTagParameter('align','left');
+    end else if (aCurrentMarkDownBlock.Tag and tcaRight)<>0 then begin
+     result.AddTagParameter('align','right');
+    end;
+   end;
+  end;
+  TMarkdown.TNodeType.HTMLBlock:begin
+   result:=THTML.TNode.Create(THTML.TNodeType.Text,'',aCurrentMarkDownBlock.StringData);
+   exit;
+  end;
+  TMarkdown.TNodeType.HTMLComment:begin
+   result:=THTML.TNode.Create(THTML.TNodeType.Text,'',aCurrentMarkDownBlock.StringData);
+   exit;
+  end;
+  TMarkdown.TNodeType.LinkReferenceDefinition:begin
+   result:=THTML.TNode.Create(THTML.TNodeType.Text,'',' ');
+   exit;
+  end;
+  else begin
+   result:=nil;
+   exit;
+  end;
+ end;
+ 
+ // Process children
+ for Index:=0 to aCurrentMarkDownBlock.Children.Count-1 do begin
+  CurrentMarkDownBlock:=aCurrentMarkDownBlock.Children[Index];
+  ChildNode:=ProcessMarkDownBlockHTMLNode(CurrentMarkDownBlock);
+  if assigned(ChildNode) then begin
+   result.AddChild(ChildNode);
+  end;
+ end;
+ 
 end;
 
 function TMarkdown.ParseBlock(const aParentMarkDownBlock:TNode;const aInputText:RawByteString;const aInputFromPosition,aInputToPosition:longint):longint;
