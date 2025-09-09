@@ -6781,7 +6781,7 @@ begin
          end;
         end;
        end else begin
-        // Handle standalon char that doesn't form a valid emphasis pattern
+        // Handle standalone char that doesn't form a valid emphasis pattern
         NewMarkDownBlock(aParentMarkDownBlock,TMarkdown.TNodeType.Text,aInputText[EndPosition],0);
         inc(EndPosition);
         InputPosition:=EndPosition;
@@ -6831,6 +6831,12 @@ begin
           continue;
          end;
         end;
+       end else begin
+        // Handle standalone char that doesn't form a valid codespan pattern
+        NewMarkDownBlock(aParentMarkDownBlock,TMarkdown.TNodeType.Text,aInputText[EndPosition],0);
+        inc(EndPosition);
+        InputPosition:=EndPosition;
+        continue;
        end;
       end;
 
@@ -7228,12 +7234,18 @@ begin
        end;
       end;
 
-      // Escaoe
+      // Escape
       '\':begin
        if ((EndPosition+1)<=aInputToPosition) and (aInputText[EndPosition+1] in ['!','"','#','$','%','&','''','(',')','*','+',',','-','.','/','0'..'9',':',';','<','=','>','?','@','A'..'Z','[','\',']','^','_','`','a'..'z','{','|','}','~']) then begin
         NewMarkDownBlock(aParentMarkDownBlock,TMarkdown.TNodeType.Text,copy(aInputText,EndPosition+1,1),0);
         InputPosition:=EndPosition+2;
         EndPosition:=InputPosition;
+        continue;
+       end else begin
+        // Handle standalon char that doesn't form a valid escape pattern
+        NewMarkDownBlock(aParentMarkDownBlock,TMarkdown.TNodeType.Text,aInputText[EndPosition],0);
+        inc(EndPosition);
+        InputPosition:=EndPosition;
         continue;
        end;
       end;
@@ -7332,6 +7344,12 @@ begin
          ParseInline(MarkDownBlock,copy(aInputText,StartPosition,TempPosition-StartPosition),1,TempPosition-StartPosition);
          InputPosition:=TempPosition;
          EndPosition:=InputPosition;
+         continue;
+        end else begin
+         // Handle standalon char that doesn't form a valid subscript pattern
+         NewMarkDownBlock(aParentMarkDownBlock,TMarkdown.TNodeType.Text,aInputText[EndPosition],0);
+         inc(EndPosition);
+         InputPosition:=EndPosition;
          continue;
         end;
        end;
