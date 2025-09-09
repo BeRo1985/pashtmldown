@@ -451,7 +451,8 @@ type
               Entity,
               HTMLTag,
               WebLink,
-              Subscript,
+              SubScript,
+              SuperScript,
               Link,
               Image,
               ReferenceLink,
@@ -4956,7 +4957,10 @@ begin
    result:='<a href="'+EscapeHTML(aCurrentMarkDownBlock.StringData)+'">'+EscapeHTML(aCurrentMarkDownBlock.StringData)+'</a>';
    exit;
   end;
-  TMarkdown.TNodeType.Subscript:begin
+  TMarkdown.TNodeType.SubScript:begin
+   result:='<sub>';
+  end;
+  TMarkdown.TNodeType.SuperScript:begin
    result:='<sup>';
   end;
   TMarkdown.TNodeType.Link:begin
@@ -5099,7 +5103,10 @@ begin
   end;
   TMarkdown.TNodeType.WebLink:begin
   end;
-  TMarkdown.TNodeType.Subscript:begin
+  TMarkdown.TNodeType.SubScript:begin
+   result:=result+'</sub>';
+  end;
+  TMarkdown.TNodeType.SuperScript:begin
    result:=result+'</sup>';
   end;
   TMarkdown.TNodeType.Link:begin
@@ -5224,7 +5231,10 @@ begin
    result.AddChild(THTML.TNode.Create(THTML.TNodeType.Text,'',EscapeHTML(aCurrentMarkDownBlock.StringData)));
    exit;
   end;
-  TMarkdown.TNodeType.Subscript:begin
+  TMarkdown.TNodeType.SubScript:begin
+   result:=THTML.TNode.Create(THTML.TNodeType.Tag,'SUB');
+  end;
+  TMarkdown.TNodeType.SuperScript:begin
    result:=THTML.TNode.Create(THTML.TNodeType.Tag,'SUP');
   end;
   TMarkdown.TNodeType.Link:begin
@@ -6742,8 +6752,62 @@ begin
 
      case aInputText[InputPosition] of
 
-      // Emphasis
+      // Emphasis / Subscript
       '*','_','~','=':begin
+        if ((EndPosition-1)>=aInputFromPosition) and
+           (not (aInputText[EndPosition-1] in [#0..#32,'~'])) and
+           (aInputText[EndPosition]='~') then begin
+        // Subscript
+        if ((EndPosition+1)<=aInputToPosition) and (aInputText[EndPosition+1]='(') then begin
+         TempPosition:=EndPosition+2;
+         StartPosition:=TempPosition;
+         Count:=1;
+         while TempPosition<=aInputToPosition do begin
+          case aInputText[TempPosition] of
+           '(':begin
+            inc(Count);
+            inc(TempPosition);
+           end;
+           ')':begin
+            dec(Count);
+            inc(TempPosition);
+            if Count=0 then begin
+             StopPosition:=TempPosition-1;
+             if StartPosition<StopPosition then begin
+              MarkDownBlock:=NewMarkDownBlock(aParentMarkDownBlock,TMarkdown.TNodeType.SubScript,'',0);
+              ParseInline(MarkDownBlock,copy(aInputText,StartPosition,StopPosition-StartPosition),1,StopPosition-StartPosition);
+              InputPosition:=TempPosition;
+              EndPosition:=InputPosition;
+             end;
+             break;
+            end;
+           end;
+           else begin
+            inc(TempPosition);
+           end;
+          end;
+         end;
+         if Count=0 then begin
+          continue;
+         end;
+        end else begin
+         TempPosition:=EndPosition+1;
+         StartPosition:=TempPosition;
+         while (TempPosition<=aInputToPosition) and (aInputText[TempPosition] in ['A'..'Z','a'..'z','0'..'9']) do begin
+          inc(TempPosition);
+         end;
+         if TempPosition>StartPosition then begin
+          MarkDownBlock:=NewMarkDownBlock(aParentMarkDownBlock,TMarkdown.TNodeType.SubScript,'',0);
+          ParseInline(MarkDownBlock,copy(aInputText,StartPosition,TempPosition-StartPosition),1,TempPosition-StartPosition);
+          if (TempPosition<=aInputToPosition) and (aInputText[TempPosition]='~') then begin
+           inc(TempPosition);
+          end;
+          InputPosition:=TempPosition;
+          EndPosition:=InputPosition;
+          continue;
+         end;
+        end;
+       end;
        if (((EndPosition-1)<aInputFromPosition) or (aInputText[EndPosition-1] in [#32,'>'])) then begin
         EmphasisChar:=aInputText[EndPosition];
         if ((EndPosition+1)<=aInputToPosition) and
@@ -7302,7 +7366,7 @@ begin
        continue;
       end;
 
-      // Subscript
+      // SuperScript
       '^':begin
        if ((EndPosition+1)<=aInputToPosition) and (aInputText[EndPosition+1]='(') then begin
         TempPosition:=EndPosition+2;
@@ -7320,7 +7384,7 @@ begin
            if Count=0 then begin
             StopPosition:=TempPosition-1;
             if StartPosition<StopPosition then begin
-             MarkDownBlock:=NewMarkDownBlock(aParentMarkDownBlock,TMarkdown.TNodeType.Subscript,'',0);
+             MarkDownBlock:=NewMarkDownBlock(aParentMarkDownBlock,TMarkdown.TNodeType.SuperScript,'',0);
              ParseInline(MarkDownBlock,copy(aInputText,StartPosition,StopPosition-StartPosition),1,StopPosition-StartPosition);
              InputPosition:=TempPosition;
              EndPosition:=InputPosition;
@@ -7343,13 +7407,16 @@ begin
          inc(TempPosition);
         end;
         if TempPosition>StartPosition then begin
-         MarkDownBlock:=NewMarkDownBlock(aParentMarkDownBlock,TMarkdown.TNodeType.Subscript,'',0);
+         MarkDownBlock:=NewMarkDownBlock(aParentMarkDownBlock,TMarkdown.TNodeType.SuperScript,'',0);
          ParseInline(MarkDownBlock,copy(aInputText,StartPosition,TempPosition-StartPosition),1,TempPosition-StartPosition);
+         if (TempPosition<=aInputToPosition) and (aInputText[TempPosition]='^') then begin
+          inc(TempPosition);
+         end;
          InputPosition:=TempPosition;
          EndPosition:=InputPosition;
          continue;
         end else begin
-         // Handle standalon char that doesn't form a valid subscript pattern
+         // Handle standalon char that doesn't form a valid superscript pattern
          NewMarkDownBlock(aParentMarkDownBlock,TMarkdown.TNodeType.Text,aInputText[EndPosition],0);
          inc(EndPosition);
          InputPosition:=EndPosition;
