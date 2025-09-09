@@ -381,7 +381,7 @@ type
               procedure Add(const aTagParameter:TTagParameter);
               procedure Clear;
               function FindByName(const aName:RawByteString):TTagParameter;
-             published 
+             published
               property Items[const aIndex:longint]:TTagParameter read GetItem; default;
               property Count:longint read fCount;
             end;
@@ -400,7 +400,7 @@ type
               destructor Destroy; override;
               procedure Add(const aNode:TNode);
               procedure Clear;
-             published 
+             published
               property Items[const aIndex:longint]:TNode read GetItem; default;
               property Count:longint read fCount;
             end;
@@ -436,7 +436,7 @@ type
        function GetPlainText:RawByteString;
        function GetMarkDown:RawByteString;
        function GetHTML(aAllowedTags:TStringList=nil):RawByteString;
-      published 
+      published
        property RootNode:TNode read fRootNode;
      end;
 
@@ -457,6 +457,7 @@ type
               ReferenceLink,
               ReferenceImage,
               LineBreak,
+              SoftBreak,
               Emphasis,
               Strikethrough,
               ATXHeader,
@@ -494,7 +495,7 @@ type
               destructor Destroy; override;
               procedure Add(const aNode:TNode);
               procedure Clear;
-             published 
+             published
               property Items[const aIndex:longint]:TNode read GetItem; default;
               property Count:longint read fCount;
             end;
@@ -505,6 +506,7 @@ type
               fChildren:TNodeList;
               fBlockType:TNodeType;
               fStringData:RawByteString;
+              fMetaData:RawByteString;
               fTag:longint;
              public
               constructor Create(const aBlockType:TNodeType;const aStringData:RawByteString='';const aTag:longint=0);
@@ -514,6 +516,7 @@ type
               property Children:TNodeList read fChildren;
               property BlockType:TNodeType read fBlockType write fBlockType;
               property StringData:RawByteString read fStringData write fStringData;
+              property MetaData:RawByteString read fMetaData write fMetaData;
               property Tag:longint read fTag write fTag;
             end;
 
@@ -532,7 +535,7 @@ type
        function ParseATXHeader(const aParentMarkDownBlock:TNode;const aInputText:RawByteString;const aInputFromPosition,aInputToPosition:longint):longint;
        function ParseHorizontalRule(const aParentMarkDownBlock:TNode;const aInputText:RawByteString;const aInputFromPosition,aInputToPosition:longint):longint;
        function ParseList(const aParentMarkDownBlock:TNode;const aInputText:RawByteString;const aInputFromPosition,aInputToPosition:longint):longint;
-       function ParseListItem(const aParentMarkDownBlock:TNode;var aListParentMarkDownBlock:TNode;const aInputText:RawByteString;const aInputFromPosition,aInputToPosition:longint;out aLineEnd:boolean):longint;
+       function ParseListItem(const aParentMarkDownBlock:TNode;var aListParentMarkDownBlock:TNode;const aInputText:RawByteString;const aInputFromPosition,aInputToPosition:longint;var aLineEnd,aListBlock:boolean):longint;
        function ParseFencedCode(const aParentMarkDownBlock:TNode;const aInputText:RawByteString;const aInputFromPosition,aInputToPosition:longint):longint;
        function ParseHTMLBlock(const aParentMarkDownBlock:TNode;const aInputText:RawByteString;const aInputFromPosition,aInputToPosition:longint):longint;
        function ParseTable(const aParentMarkDownBlock:TNode;const aInputText:RawByteString;const aInputFromPosition,aInputToPosition:longint):longint;
@@ -554,9 +557,11 @@ type
        constructor Create(const aMarkdown:RawByteString);
        destructor Destroy; override;
        function GetHTML:THTML;
-      published 
+      published
        property RootNode:TNode read fRootNode;
      end;
+
+function ConvertEntities(s:RawByteString;Charset:THTML.TCharset;const aPreserveWhiteSpace:Boolean):RawByteString;
 
 function MarkDownToHTML(const aInputText:RawByteString):RawByteString;
 
@@ -1084,7 +1089,7 @@ begin
   end;
   THTML.TCharset.ISO_8859_2:begin
    result:=CharISO_8859_2;
-  end; 
+  end;
   THTML.TCharset.ISO_8859_3:begin
    result:=CharISO_8859_3;
   end;
@@ -1729,7 +1734,7 @@ begin
   end;
   else begin
    result:='ISO-8859-1';
-  end; 
+  end;
  end;
 end;
 
@@ -2613,7 +2618,7 @@ begin
  EntityInitialized:=false;
 end;
 
-function ConvertToEntities(AString:RawByteString;IdentLevel:longint=0):RawByteString;
+function ConvertToEntities(AString:RawByteString;IdentLevel:longint=0;const aPreserveWhiteSpace:Boolean=false):RawByteString;
 var Counter,IdentCounter:longint;
     c:longword;
 begin
@@ -2621,21 +2626,21 @@ begin
  Counter:=1;
  while Counter<=length(AString) do begin
   c:=UTF8CodeUnitGetCharAndInc(AString,Counter);
-  if c=13 then begin
+  if (not aPreserveWhiteSpace) and (c=13) then begin
    if ((Counter+1)<=length(AString)) and (AString[Counter+1]=#10) then begin
     continue;
    end;
    c:=10;
-  end else if c=10 then begin
+  end else if (not aPreserveWhiteSpace) and (c=10) then begin
    if ((Counter+1)<=length(AString)) and (AString[Counter+1]=#13) then begin
     inc(Counter);
    end;
   end;
-  if EntitiesCharLookUp[ord(c)].IsEntity then begin
-   result:=result+EntitiesCharLookUp[ord(c)].Entity;
+  if (c<length(EntitiesCharLookUp)) and EntitiesCharLookUp[c].IsEntity then begin
+   result:=result+EntitiesCharLookUp[c].Entity;
   end else if (c=9) or (c=10) or (c=13) or ((c>=32) and (c<=127)) then begin
    result:=result+ansichar(byte(c));
-   if c=10 then begin
+   if (not aPreserveWhiteSpace) and (c=10) then begin
     for IdentCounter:=1 to IdentLevel do begin
      result:=result+' ';
     end;
@@ -2650,27 +2655,29 @@ begin
  end;
 end;
 
-function ConvertEntities(s:RawByteString;Charset:THTML.TCharset):RawByteString;
+function ConvertEntities(s:RawByteString;Charset:THTML.TCharset;const aPreserveWhiteSpace:Boolean):RawByteString;
 var i,j,d,c,EntityLength,EntityPosition:longint;
     IsItAnEntity:boolean;
     Entity:RawByteString;
 begin
  result:=EncodeString(s,Charset,THTML.TCharset.UTF_8);
- i:=pos(#13#10,result);
- while i>0 do begin
-  result[i]:=' ';
-  delete(result,i+1,1);
+ if not aPreserveWhiteSpace then begin
   i:=pos(#13#10,result);
- end;
- for i:=1 to length(result) do begin
-  if result[i] in [#9,#13,#10] then begin
+  while i>0 do begin
    result[i]:=' ';
+   delete(result,i+1,1);
+   i:=pos(#13#10,result);
   end;
- end;
- i:=pos('  ',result);
- while i>0 do begin
-  delete(result,i,1);
+  for i:=1 to length(result) do begin
+   if result[i] in [#9,#13,#10] then begin
+    result[i]:=' ';
+   end;
+  end;
   i:=pos('  ',result);
+  while i>0 do begin
+   delete(result,i,1);
+   i:=pos('  ',result);
+  end;
  end;
  i:=1;
  IsItAnEntity:=false;
@@ -2901,7 +2908,7 @@ var i,j:longint;
  begin
   if (length(trim(Text))>0) and (StackPointer>=0) and (StackPointer<length(Stack)) then begin
    StackNode:=Stack[StackPointer];
-   TextNode:=TNode.Create(TNodeType.Text,'',ConvertEntities(Text,TCharset(aCharset)));
+   TextNode:=TNode.Create(TNodeType.Text,'',ConvertEntities(Text,TCharset(aCharset),(StackNode.fNodeType=TNodeType.Tag) and (StackNode.TagName='PRE')));
    StackNode.AddChild(TextNode);
   end;
   Text:='';
@@ -3591,7 +3598,7 @@ var Charset:TCharset;
      end;
      for i:=0 to Node.TagParameters.Count-1 do begin
       if Node.TagParameters[i].Name='TITLE' then begin
-       result:=result+'('+ConvertEntities(Node.TagParameters[i].Value,Charset)+')';
+       result:=result+'('+ConvertEntities(Node.TagParameters[i].Value,Charset,false)+')';
        break;
       end;
      end;
@@ -3839,7 +3846,7 @@ var Charset:TCharset;
      result:='{Link< ';
      for i:=0 to Node.TagParameters.Count-1 do begin
       if Node.TagParameters[i].Name='HREF' then begin
-       result:=result+ConvertEntities(Node.TagParameters[i].Value,Charset);
+       result:=result+ConvertEntities(Node.TagParameters[i].Value,Charset,false);
        break;
       end;
      end;
@@ -4238,7 +4245,7 @@ var Charset:TCharset;
      end;
      for i:=0 to Node.TagParameters.Count-1 do begin
       if Node.TagParameters[i].Name='TITLE' then begin
-       result:=result+'('+ConvertEntities(Node.TagParameters[i].Value,Charset)+')';
+       result:=result+'('+ConvertEntities(Node.TagParameters[i].Value,Charset,false)+')';
        break;
       end;
      end;
@@ -4495,7 +4502,7 @@ var Charset:TCharset;
      result:=result+'](';
      for i:=0 to Node.TagParameters.Count-1 do begin
       if Node.TagParameters[i].Name='HREF' then begin
-       result:=result+ConvertEntities(Node.TagParameters[i].Value,Charset);
+       result:=result+ConvertEntities(Node.TagParameters[i].Value,Charset,false);
        break;
       end;
      end;
@@ -4504,14 +4511,14 @@ var Charset:TCharset;
      result:=' ![';
      for i:=0 to Node.TagParameters.Count-1 do begin
       if Node.TagParameters[i].Name='ALT' then begin
-       result:=result+ConvertEntities(Node.TagParameters[i].Value,Charset);
+       result:=result+ConvertEntities(Node.TagParameters[i].Value,Charset,false);
        break;
       end;
      end;
      result:=result+'](';
      for i:=0 to Node.TagParameters.Count-1 do begin
       if Node.TagParameters[i].Name='SRC' then begin
-       result:=result+ConvertEntities(Node.TagParameters[i].Value,Charset);
+       result:=result+ConvertEntities(Node.TagParameters[i].Value,Charset,false);
        break;
       end;
      end;
@@ -4539,35 +4546,41 @@ begin
 end;
 
 function THTML.GetHTML(aAllowedTags:TStringList=nil):RawByteString;
- function Build(const Node:TNode):RawByteString;
+ function Build(const aNode:TNode;aPreserveWhiteSpace:Boolean=false):RawByteString;
  var i:longint;
  begin
-  case Node.NodeType of
+  case aNode.NodeType of
    TNodeType.Root:begin
     result:='';
-    for i:=0 to Node.Children.Count-1 do begin
-     result:=result+Build(Node.Children[i]);
+    for i:=0 to aNode.Children.Count-1 do begin
+     result:=result+Build(aNode.Children[i],aPreserveWhiteSpace);
     end;
    end;
    TNodeType.Tag:begin
-    if (aAllowedTags=nil) or (aAllowedTags.IndexOf(LowerCase(Node.TagName))>=0) then begin
-     result:='<'+LowerCase(Node.TagName);
-     for i:=0 to Node.TagParameters.Count-1 do begin
-      result:=result+' '+LowerCase(Node.TagParameters[i].Name)+'="'+ConvertToEntities(Node.TagParameters[i].Value)+'"';
+    if (aAllowedTags=nil) or (aAllowedTags.IndexOf(LowerCase(aNode.TagName))>=0) then begin
+     if aNode.TagName='PRE' then begin
+      aPreserveWhiteSpace:=true;
      end;
-     if (Node.Children.Count>0) or not ((Node.TagName='BR') or (Node.TagName='HR')) then begin
+     result:='<'+LowerCase(aNode.TagName);
+     for i:=0 to aNode.TagParameters.Count-1 do begin
+      result:=result+' '+LowerCase(aNode.TagParameters[i].Name)+'="'+ConvertToEntities(aNode.TagParameters[i].Value,0,false)+'"';
+     end;
+     if (aNode.Children.Count>0) or not ((aNode.TagName='BR') or (aNode.TagName='HR')) then begin
       result:=result+'>';
-      for i:=0 to Node.Children.Count-1 do begin
-       result:=result+Build(Node.Children[i]);
+      for i:=0 to aNode.Children.Count-1 do begin
+       result:=result+Build(aNode.Children[i],aPreserveWhiteSpace);
       end;
-      result:=result+'</'+LowerCase(Node.TagName)+'>';
+      result:=result+'</'+LowerCase(aNode.TagName)+'>';
      end else begin
       result:=result+'/>';
+      if aNode.TagName='BR' then begin
+       result:=result+#10;
+      end;
      end;
     end;
    end;
    TNodeType.Text:begin
-    result:=ConvertToEntities(Node.Text);
+    result:=ConvertToEntities(aNode.Text,0,aPreserveWhiteSpace);
    end;
    else begin
     result:='';
@@ -4575,7 +4588,7 @@ function THTML.GetHTML(aAllowedTags:TStringList=nil):RawByteString;
   end;
  end;
 begin
- result:=Build(RootNode);
+ result:=Build(RootNode,false);
 end;
 
 { TMarkdown.TNodeList }
@@ -4630,6 +4643,7 @@ begin
  inherited Create;
  fBlockType:=aBlockType;
  fStringData:=aStringData;
+ fMetaData:='';
  fTag:=aTag;
  fChildren:=TNodeList.Create;
  fParent:=nil;
@@ -4958,7 +4972,11 @@ begin
    result:='<img src="'+EscapeHTML(fLinkStringList.Values[LowerCase(Trim(aCurrentMarkDownBlock.StringData))])+'" alt="';
   end;
   TMarkdown.TNodeType.LineBreak:begin
-   result:='<br/>';
+   result:='<br/>'#10;
+   exit;
+  end;
+  TMarkdown.TNodeType.SoftBreak:begin
+   result:=#10;
    exit;
   end;
   TMarkdown.TNodeType.Emphasis:begin
@@ -5098,6 +5116,8 @@ begin
   end;
   TMarkdown.TNodeType.LineBreak:begin
   end;
+  TMarkdown.TNodeType.SoftBreak:begin
+  end;
   TMarkdown.TNodeType.Emphasis:begin
    case aCurrentMarkDownBlock.Tag of
     1:begin
@@ -5199,46 +5219,50 @@ begin
    exit;
   end;
   TMarkdown.TNodeType.WebLink:begin
-   result:=THTML.TNode.Create(THTML.TNodeType.Tag,'a');
-   result.AddTagParameter('href',EscapeHTML(aCurrentMarkDownBlock.StringData));
+   result:=THTML.TNode.Create(THTML.TNodeType.Tag,'A');
+   result.AddTagParameter('HREF',EscapeHTML(aCurrentMarkDownBlock.StringData));
    result.AddChild(THTML.TNode.Create(THTML.TNodeType.Text,'',EscapeHTML(aCurrentMarkDownBlock.StringData)));
    exit;
   end;
   TMarkdown.TNodeType.Subscript:begin
-   result:=THTML.TNode.Create(THTML.TNodeType.Tag,'sup');
+   result:=THTML.TNode.Create(THTML.TNodeType.Tag,'SUP');
   end;
   TMarkdown.TNodeType.Link:begin
-   result:=THTML.TNode.Create(THTML.TNodeType.Tag,'a');
-   result.AddTagParameter('href',EscapeHTML(aCurrentMarkDownBlock.StringData));
+   result:=THTML.TNode.Create(THTML.TNodeType.Tag,'A');
+   result.AddTagParameter('HREF',EscapeHTML(aCurrentMarkDownBlock.StringData));
   end;
   TMarkdown.TNodeType.Image:begin
-   result:=THTML.TNode.Create(THTML.TNodeType.Tag,'img');
-   result.AddTagParameter('src',EscapeHTML(aCurrentMarkDownBlock.StringData));
-   result.AddTagParameter('alt','');
+   result:=THTML.TNode.Create(THTML.TNodeType.Tag,'IMG');
+   result.AddTagParameter('SRC',EscapeHTML(aCurrentMarkDownBlock.StringData));
+   result.AddTagParameter('ALT','');
   end;
   TMarkdown.TNodeType.ReferenceLink:begin
-   result:=THTML.TNode.Create(THTML.TNodeType.Tag,'a');
-   result.AddTagParameter('href',EscapeHTML(fLinkStringList.Values[LowerCase(Trim(aCurrentMarkDownBlock.StringData))]));
+   result:=THTML.TNode.Create(THTML.TNodeType.Tag,'A');
+   result.AddTagParameter('HREF',EscapeHTML(fLinkStringList.Values[LowerCase(Trim(aCurrentMarkDownBlock.StringData))]));
   end;
   TMarkdown.TNodeType.ReferenceImage:begin
-   result:=THTML.TNode.Create(THTML.TNodeType.Tag,'img');
-   result.AddTagParameter('src',EscapeHTML(fLinkStringList.Values[LowerCase(Trim(aCurrentMarkDownBlock.StringData))]));
-   result.AddTagParameter('alt','');
+   result:=THTML.TNode.Create(THTML.TNodeType.Tag,'IMG');
+   result.AddTagParameter('SRC',EscapeHTML(fLinkStringList.Values[LowerCase(Trim(aCurrentMarkDownBlock.StringData))]));
+   result.AddTagParameter('ALT','');
   end;
   TMarkdown.TNodeType.LineBreak:begin
-   result:=THTML.TNode.Create(THTML.TNodeType.Tag,'br');
+   result:=THTML.TNode.Create(THTML.TNodeType.Tag,'BR');
+   exit;
+  end;
+  TMarkdown.TNodeType.SoftBreak:begin
+   result:=THTML.TNode.Create(THTML.TNodeType.Text,'',#10);
    exit;
   end;
   TMarkdown.TNodeType.Emphasis:begin
    case aCurrentMarkDownBlock.Tag of
     1:begin
-     result:=THTML.TNode.Create(THTML.TNodeType.Tag,'em');
+     result:=THTML.TNode.Create(THTML.TNodeType.Tag,'EM');
     end;
     2:begin
-     result:=THTML.TNode.Create(THTML.TNodeType.Tag,'strong');
+     result:=THTML.TNode.Create(THTML.TNodeType.Tag,'STRONG');
     end;
     3:begin
-     result:=THTML.TNode.Create(THTML.TNodeType.Tag,'strong');
+     result:=THTML.TNode.Create(THTML.TNodeType.Tag,'STRONG');
     end;
     else begin
      result:=nil;
@@ -5247,75 +5271,81 @@ begin
    end;
   end;
   TMarkdown.TNodeType.Strikethrough:begin
-   result:=THTML.TNode.Create(THTML.TNodeType.Tag,'del');
+   result:=THTML.TNode.Create(THTML.TNodeType.Tag,'DEL');
   end;
   TMarkdown.TNodeType.ATXHeader:begin
-   result:=THTML.TNode.Create(THTML.TNodeType.Tag,'h'+IntToStr(aCurrentMarkDownBlock.Tag));
+   result:=THTML.TNode.Create(THTML.TNodeType.Tag,'H'+IntToStr(aCurrentMarkDownBlock.Tag));
   end;
   TMarkdown.TNodeType.HorizontalRule:begin
-   result:=THTML.TNode.Create(THTML.TNodeType.Tag,'hr');
+   result:=THTML.TNode.Create(THTML.TNodeType.Tag,'HR');
    exit;
   end;
   TMarkdown.TNodeType.Highlight:begin
-   result:=THTML.TNode.Create(THTML.TNodeType.Tag,'mark');
+   result:=THTML.TNode.Create(THTML.TNodeType.Tag,'MARK');
   end;
   TMarkdown.TNodeType.Paragraph:begin
-   result:=THTML.TNode.Create(THTML.TNodeType.Tag,'p');
+   result:=THTML.TNode.Create(THTML.TNodeType.Tag,'P');
   end;
   TMarkdown.TNodeType.SETextHeader:begin
-   result:=THTML.TNode.Create(THTML.TNodeType.Tag,'h'+IntToStr(aCurrentMarkDownBlock.Tag));
+   result:=THTML.TNode.Create(THTML.TNodeType.Tag,'H'+IntToStr(aCurrentMarkDownBlock.Tag));
   end;
   TMarkdown.TNodeType.CodeBlock:begin
-   result:=THTML.TNode.Create(THTML.TNodeType.Tag,'pre');
+   result:=THTML.TNode.Create(THTML.TNodeType.Tag,'PRE');
    result.AddChild(THTML.TNode.Create(THTML.TNodeType.Text,'',EscapeHTML(aCurrentMarkDownBlock.StringData)));
    exit;
   end;
   TMarkdown.TNodeType.FencedCodeBlock:begin
-   result:=THTML.TNode.Create(THTML.TNodeType.Tag,'pre');
+   result:=THTML.TNode.Create(THTML.TNodeType.Tag,'PRE');
+   if length(aCurrentMarkDownBlock.fMetaData)>0 then begin
+    result.AddTagParameter('HIGHLIGHTING',aCurrentMarkDownBlock.fMetaData);
+   end;
    result.AddChild(THTML.TNode.Create(THTML.TNodeType.Text,'',EscapeHTML(aCurrentMarkDownBlock.StringData)));
    exit;
   end;
   TMarkdown.TNodeType.CodeSpan:begin
-   result:=THTML.TNode.Create(THTML.TNodeType.Tag,'code');
+   result:=THTML.TNode.Create(THTML.TNodeType.Tag,'CODE');
+   if length(aCurrentMarkDownBlock.fMetaData)>0 then begin
+    result.AddTagParameter('HIGHLIGHTING',aCurrentMarkDownBlock.fMetaData);
+   end;
    result.AddChild(THTML.TNode.Create(THTML.TNodeType.Text,'',EscapeHTML(aCurrentMarkDownBlock.StringData)));
    exit;
   end;
   TMarkdown.TNodeType.BlockQuote:begin
-   result:=THTML.TNode.Create(THTML.TNodeType.Tag,'blockquote');
+   result:=THTML.TNode.Create(THTML.TNodeType.Tag,'BLOCKQUOTE');
   end;
   TMarkdown.TNodeType.UnorderedList:begin
-   result:=THTML.TNode.Create(THTML.TNodeType.Tag,'ul');
+   result:=THTML.TNode.Create(THTML.TNodeType.Tag,'UL');
   end;
   TMarkdown.TNodeType.OrderedList:begin
-   result:=THTML.TNode.Create(THTML.TNodeType.Tag,'ol');
+   result:=THTML.TNode.Create(THTML.TNodeType.Tag,'OL');
   end;
   TMarkdown.TNodeType.ListItem:begin
-   result:=THTML.TNode.Create(THTML.TNodeType.Tag,'li');
+   result:=THTML.TNode.Create(THTML.TNodeType.Tag,'LI');
   end;
   TMarkdown.TNodeType.Table:begin
-   result:=THTML.TNode.Create(THTML.TNodeType.Tag,'table');
+   result:=THTML.TNode.Create(THTML.TNodeType.Tag,'TABLE');
   end;
   TMarkdown.TNodeType.TableRow:begin
-   result:=THTML.TNode.Create(THTML.TNodeType.Tag,'tr');
+   result:=THTML.TNode.Create(THTML.TNodeType.Tag,'TR');
   end;
   TMarkdown.TNodeType.TableCell:begin
    if (aCurrentMarkDownBlock.Tag and tfHeader)<>0 then begin
-    result:=THTML.TNode.Create(THTML.TNodeType.Tag,'th');
+    result:=THTML.TNode.Create(THTML.TNodeType.Tag,'TH');
     if (aCurrentMarkDownBlock.Tag and (tcaLeft or tcaRight))=(tcaLeft or tcaRight) then begin
-     result.AddTagParameter('align','center');
+     result.AddTagParameter('ALIGN','CENTER');
     end else if (aCurrentMarkDownBlock.Tag and tcaLeft)<>0 then begin
-     result.AddTagParameter('align','left');
+     result.AddTagParameter('ALIGN','LEFT');
     end else if (aCurrentMarkDownBlock.Tag and tcaRight)<>0 then begin
-     result.AddTagParameter('align','right');
+     result.AddTagParameter('ALIGN','RIGHT');
     end;
    end else begin
-    result:=THTML.TNode.Create(THTML.TNodeType.Tag,'td');
+    result:=THTML.TNode.Create(THTML.TNodeType.Tag,'TD');
     if (aCurrentMarkDownBlock.Tag and (tcaLeft or tcaRight))=(tcaLeft or tcaRight) then begin
-     result.AddTagParameter('align','center');
+     result.AddTagParameter('ALIGN','CENTER');
     end else if (aCurrentMarkDownBlock.Tag and tcaLeft)<>0 then begin
-     result.AddTagParameter('align','left');
+     result.AddTagParameter('ALIGN','LEFT');
     end else if (aCurrentMarkDownBlock.Tag and tcaRight)<>0 then begin
-     result.AddTagParameter('align','right');
+     result.AddTagParameter('ALIGN','RIGHT');
     end;
    end;
   end;
@@ -5336,7 +5366,7 @@ begin
    exit;
   end;
  end;
- 
+
  // Process children
  for Index:=0 to aCurrentMarkDownBlock.Children.Count-1 do begin
   CurrentMarkDownBlock:=aCurrentMarkDownBlock.Children[Index];
@@ -5345,7 +5375,7 @@ begin
    result.AddChild(ChildNode);
   end;
  end;
- 
+
 end;
 
 function TMarkdown.ParseBlock(const aParentMarkDownBlock:TNode;const aInputText:RawByteString;const aInputFromPosition,aInputToPosition:longint):longint;
@@ -5471,7 +5501,7 @@ begin
 
   // Paragraph
   NewPosition:=ParseParagraph(aParentMarkDownBlock,aInputText,InputPosition,aInputToPosition);
-  if NewPosition>0 then begin
+  if NewPosition>InputPosition then begin
    InputPosition:=NewPosition;
   end else begin
    inc(InputPosition);
@@ -5718,14 +5748,16 @@ end;
 function TMarkdown.ParseList(const aParentMarkDownBlock:TNode;const aInputText:RawByteString;const aInputFromPosition,aInputToPosition:longint):longint;
 var InputPosition,NewPosition:longint;
     ListMarkDownBlock:TNode;
-    LineEnd:boolean;
+    LineEnd,ListBlock:boolean;
 begin
  result:=0;
  InputPosition:=aInputFromPosition;
  if InputPosition<=aInputToPosition then begin
   ListMarkDownBlock:=nil;
+  LineEnd:=false;
+  ListBlock:=false;
   while InputPosition<=aInputToPosition do begin
-   NewPosition:=ParseListItem(aParentMarkDownBlock,ListMarkDownBlock,aInputText,InputPosition,aInputToPosition,LineEnd);
+   NewPosition:=ParseListItem(aParentMarkDownBlock,ListMarkDownBlock,aInputText,InputPosition,aInputToPosition,LineEnd,ListBlock);
    if NewPosition>0 then begin
     InputPosition:=NewPosition;
     if LineEnd then begin
@@ -5742,24 +5774,30 @@ begin
 end;
 
 function TMarkdown.ParseFencedCode(const aParentMarkDownBlock:TNode;const aInputText:RawByteString;const aInputFromPosition,aInputToPosition:longint):longint;
-var InputPosition,TempPosition,TempCount,StartPosition,StopPosition,OtherTempCount,BlockStart,BlockEnd:longint;
-    FencedCodeChar:ansichar;
-begin
- result:=0;
- InputPosition:=aInputFromPosition;
- if (InputPosition+2)<=aInputToPosition then begin
-  if ((InputPosition+2)<=aInputToPosition) and (aInputText[InputPosition]=#32) then begin
-   inc(InputPosition);
-   if ((InputPosition+1)<=aInputToPosition) and (aInputText[InputPosition]=#32) then begin
-    inc(InputPosition);
-    if (InputPosition<=aInputToPosition) and (aInputText[InputPosition]=#32) then begin
-     inc(InputPosition);
+
+ procedure SkipWhiteSpaces(var aInputPosition:longint;const aInputToPosition:Longint);
+ begin
+  if (aInputPosition+2)<=aInputToPosition then begin
+   if ((aInputPosition+2)<=aInputToPosition) and (aInputText[aInputPosition]=#32) then begin
+    inc(aInputPosition);
+    if ((aInputPosition+1)<=aInputToPosition) and (aInputText[aInputPosition]=#32) then begin
+     inc(aInputPosition);
+     if (aInputPosition<=aInputToPosition) and (aInputText[aInputPosition]=#32) then begin
+      inc(aInputPosition);
+     end;
     end;
    end;
   end;
-  if (InputPosition<=aInputToPosition) and (aInputText[InputPosition] in ['~','`']) then begin
-   FencedCodeChar:=aInputText[InputPosition];
-   TempPosition:=InputPosition;
+ end;
+
+ function CheckInitialFence(var aInputPosition:longint;const aInputToPosition:Longint;var aFencedCodeChar:AnsiChar):longint;
+ var TempPosition,TempCount:Longint;
+     FencedCodeChar:AnsiChar;
+ begin
+  result:=0;
+  if (aInputPosition<=aInputToPosition) and (aInputText[aInputPosition] in ['~','`']) then begin
+   FencedCodeChar:=aInputText[aInputPosition];
+   TempPosition:=aInputPosition;
    TempCount:=0;
    while TempPosition<=aInputToPosition do begin
     case aInputText[TempPosition] of
@@ -5776,71 +5814,194 @@ begin
      end;
     end;
    end;
-   if TempCount>2 then begin
-    while (InputPosition<=aInputToPosition) and (aInputText[InputPosition]=#32) do begin
-     inc(InputPosition);
-    end;
-    if InputPosition<=aInputToPosition then begin
-     case aInputText[InputPosition] of
-      '{':begin
-       inc(InputPosition);
-       StartPosition:=InputPosition;
-       while (InputPosition<=aInputToPosition) and not (aInputText[InputPosition] in [#10,'}']) do begin
-        inc(InputPosition);
-       end;
-       StopPosition:=InputPosition;
-       if (InputPosition<=aInputToPosition) and (aInputText[InputPosition]='}') then begin
-        inc(InputPosition);
-        while (StartPosition<StopPosition) and (aInputText[StartPosition]=#32) do begin
-         inc(StartPosition);
-        end;
-        while ((StartPosition+1)<StopPosition) and (aInputText[StopPosition-1]=#32) do begin
-         dec(StopPosition);
-        end;
-        if StartPosition<StopPosition then begin
-         NewMarkDownBlock(aParentMarkDownBlock,TMarkdown.TNodeType.FencedCodeBlock,copy(aInputText,StartPosition,StopPosition-StartPosition),0);
-        end;
-        result:=InputPosition;
-       end;
-      end;
-      else begin
-       BlockStart:=InputPosition;
-       while (InputPosition<=aInputToPosition) and (aInputText[InputPosition]<>#10) do begin
-        inc(InputPosition);
-       end;
-       while (InputPosition<=aInputToPosition) and (aInputText[InputPosition]=#10) do begin
-        inc(InputPosition);
-        StartPosition:=InputPosition;
-        while (InputPosition<=aInputToPosition) and (aInputText[InputPosition]<>#10) do begin
-         inc(InputPosition);
-        end;
-        StopPosition:=InputPosition;
-        TempPosition:=StartPosition;
-        if TempPosition<StopPosition then begin
-         while (TempPosition<=StopPosition) and (aInputText[TempPosition]=#32) do begin
-          inc(TempPosition);
-         end;
-         OtherTempCount:=0;
-         while (TempPosition<=StopPosition) and (aInputText[TempPosition]=FencedCodeChar) and (OtherTempCount<TempCount) do begin
-          inc(TempPosition);
-          inc(OtherTempCount);
-         end;
-         if OtherTempCount=TempCount then begin
-          BlockEnd:=StartPosition;
-          if BlockStart<BlockEnd then begin
-           result:=TempPosition;
-           NewMarkDownBlock(aParentMarkDownBlock,TMarkdown.TNodeType.FencedCodeBlock,copy(aInputText,BlockStart,BlockEnd-BlockStart),0);
-          end;
-          exit;
-         end;
-        end;
-       end;
+   if TempCount>=3 then begin
+    result:=TempCount;
+    aInputPosition:=TempPosition;
+    aFencedCodeChar:=FencedCodeChar;
+   end;
+  end;
+ end;
+
+ function CheckFence(var aInputPosition:longint;const aInputToPosition:Longint;const aFencedCodeChar:AnsiChar;const aFenceLength:longint):Boolean;
+ var TempPosition,TempCount:Longint;
+ begin
+  result:=false;
+  if (aInputPosition<=aInputToPosition) and (aInputText[aInputPosition] in ['~','`']) and (aInputText[aInputPosition]=aFencedCodeChar) then begin
+   TempPosition:=aInputPosition;
+   TempCount:=0;
+   while TempPosition<=aInputToPosition do begin
+    case aInputText[TempPosition] of
+     #32:begin
+      inc(TempPosition);
+     end;
+     else begin
+      if aInputText[TempPosition]=aFencedCodeChar then begin
+       inc(TempPosition);
+       inc(TempCount);
+      end else begin
+       break;
       end;
      end;
     end;
    end;
+   if TempCount=aFenceLength then begin
+    result:=true;
+    aInputPosition:=TempPosition;
+   end;
   end;
  end;
+
+ // Trim trailing spaces/tabs from a RawByteString
+ procedure TrimRightSpaces(var aText:RawByteString);
+ var TextLength:longint;
+ begin
+  TextLength:=length(aText);
+
+  while (TextLength>0) and (aText[TextLength] in [#9,#32]) do begin
+   dec(TextLength);
+  end;
+
+  if TextLength<length(aText) then begin
+   SetLength(aText,TextLength);
+  end;
+ end;
+
+ // Move to start of the next line (consume LF, CRLF or CR)
+ procedure NextLineStartAfter(var aInputPosition:longint;const aInputToPosition:longint);
+ begin
+
+  while (aInputPosition<=aInputToPosition) and (aInputText[aInputPosition]<>#10) and (aInputText[aInputPosition]<>#13) do begin
+   inc(aInputPosition);
+  end;
+
+  if (aInputPosition<=aInputToPosition) and (aInputText[aInputPosition]=#13) then begin
+   inc(aInputPosition);
+   if (aInputPosition<=aInputToPosition) and (aInputText[aInputPosition]=#10) then begin
+    inc(aInputPosition);
+   end;
+  end else begin
+   if (aInputPosition<=aInputToPosition) and (aInputText[aInputPosition]=#10) then begin
+    inc(aInputPosition);
+   end;
+  end;
+
+ end;
+
+ // Parse optional language identifier after fence (plain or {lang})
+ procedure ParseLanguageAfterFence(var aInputPosition:longint;const aInputToPosition:longint;out aLanguage:RawByteString);
+ var StartPosition,EndPosition:longint;
+ begin
+  aLanguage:='';
+
+  while (aInputPosition<=aInputToPosition) and (aInputText[aInputPosition] in [#9,#32]) do begin
+   inc(aInputPosition);
+  end;
+
+  if (aInputPosition<=aInputToPosition) and (aInputText[aInputPosition]='{') then begin
+   inc(aInputPosition);
+   StartPosition:=aInputPosition;
+
+   while (aInputPosition<=aInputToPosition) and not (aInputText[aInputPosition] in [#10,#13,'}']) do begin
+    inc(aInputPosition);
+   end;
+
+   if (aInputPosition<=aInputToPosition) and (aInputText[aInputPosition]='}') then begin
+    EndPosition:=aInputPosition;
+    inc(aInputPosition);
+
+    if EndPosition>StartPosition then begin
+     aLanguage:=copy(aInputText,StartPosition,EndPosition-StartPosition);
+     TrimRightSpaces(aLanguage);
+    end;
+   end;
+  end else begin
+   StartPosition:=aInputPosition;
+
+   while (aInputPosition<=aInputToPosition) and not (aInputText[aInputPosition] in [#10,#13]) do begin
+    inc(aInputPosition);
+   end;
+
+   EndPosition:=aInputPosition;
+
+   if EndPosition>StartPosition then begin
+    aLanguage:=copy(aInputText,StartPosition,EndPosition-StartPosition);
+    TrimRightSpaces(aLanguage);
+   end;
+  end;
+
+  NextLineStartAfter(aInputPosition,aInputToPosition);
+ end;
+
+var InputPosition,ContentStartPosition,ContentEndPosition,LastInputPosition,
+    NewInputPositionForToContinue,NestedLevel,FenceLength:Longint;
+    FencedCodeChar:AnsiChar;
+    Language:RawByteString;
+    MarkDownBlock:TNode;
+
+begin
+
+ result:=0;
+
+ InputPosition:=aInputFromPosition;
+
+ if (InputPosition+2)<=aInputToPosition then begin
+
+  SkipWhiteSpaces(InputPosition,aInputToPosition);
+
+  FenceLength:=CheckInitialFence(InputPosition,aInputToPosition,FencedCodeChar);
+  if FenceLength>0 then begin
+
+   ParseLanguageAfterFence(InputPosition,aInputToPosition,Language);
+
+   ContentStartPosition:=InputPosition;
+   ContentEndPosition:=aInputToPosition+1;
+
+   NewInputPositionForToContinue:=aInputToPosition+1;
+
+   NestedLevel:=1;
+
+   while InputPosition<=aInputToPosition do begin
+    LastInputPosition:=InputPosition;
+    if CheckFence(InputPosition,aInputToPosition,FencedCodeChar,FenceLength) then begin
+     while (InputPosition<=aInputToPosition) and (aInputText[InputPosition] in [#32,#9]) do begin
+      inc(InputPosition);
+     end;
+     if (InputPosition>aInputToPosition) or ((InputPosition<=aInputToPosition) and (aInputText[InputPosition] in [#13,#10])) then begin
+      dec(NestedLevel);
+     end else begin
+      if (InputPosition<=aInputToPosition) and (aInputText[InputPosition]=#13) then begin
+       inc(InputPosition);
+       if (InputPosition<=aInputToPosition) and (aInputText[InputPosition]=#10) then begin
+        inc(InputPosition);
+       end;
+      end else begin
+       if (InputPosition<=aInputToPosition) and (aInputText[InputPosition]=#10) then begin
+        inc(InputPosition);
+       end;
+      end;
+      inc(NestedLevel);
+     end;
+     if NestedLevel=0 then begin
+      ContentEndPosition:=LastInputPosition;
+      NewInputPositionForToContinue:=InputPosition;
+      break;
+     end;
+    end else begin
+     inc(InputPosition);
+    end;
+   end;
+
+   if ContentStartPosition<ContentEndPosition then begin
+    MarkDownBlock:=NewMarkDownBlock(aParentMarkDownBlock,TMarkdown.TNodeType.FencedCodeBlock,copy(aInputText,ContentStartPosition,ContentEndPosition-ContentStartPosition),0);
+    MarkDownBlock.fMetaData:=Language;
+   end;
+
+   result:=NewInputPositionForToContinue;
+
+  end;
+
+ end;
+
 end;
 
 function TMarkdown.ParseHTMLBlock(const aParentMarkDownBlock:TNode;const aInputText:RawByteString;const aInputFromPosition,aInputToPosition:longint):longint;
@@ -6243,211 +6404,194 @@ begin
  end;
 end;
 
-function TMarkdown.ParseListItem(const aParentMarkDownBlock:TNode;var aListParentMarkDownBlock:TNode;const aInputText:RawByteString;const aInputFromPosition,aInputToPosition:longint;out aLineEnd:boolean):longint;
-var InputPosition,Indentation,NewIndentation,StartPosition,StopPosition,NextPosition,ListKind,NewListKind,TempIndex:longint;
-    InlineText,BlockText:RawByteString;
-    InEmpty,EmptyLine,HasInsideEmpty,ToBlockText,InFencedCodeBlock:boolean;
+function TMarkdown.ParseListItem(const aParentMarkDownBlock:TNode;var aListParentMarkDownBlock:TNode;const aInputText:RawByteString;const aInputFromPosition,aInputToPosition:longint;var aLineEnd,aListBlock:boolean):longint;
+var InputPosition,EndPosition,StartPosition,Indentation,NewIndentation,NewIndentationOffset,SubList,
+    ListKind,NewListKind:longint;
+    WorkText:RawByteString;
+    InEmpty,HasInsideEmpty:boolean;
     ListItemMarkDownBlock:TNode;
 begin
- result:=0;
- aLineEnd:=false;
+
  InputPosition:=aInputFromPosition;
+
  if InputPosition<=aInputToPosition then begin
 
-  InEmpty:=false;
-  HasInsideEmpty:=false;
-  InFencedCodeBlock:=false;
-
+  // Keep track of the first indentation prefix
   Indentation:=0;
   while (InputPosition<=aInputToPosition) and (aInputText[InputPosition]=#32) and (Indentation<3) do begin
    inc(InputPosition);
    inc(Indentation);
   end;
 
-  if InputPosition<=aInputToPosition then begin
+  // Check for list marker
+  StartPosition:=InputPosition;
+  while (StartPosition<=aInputToPosition) and (aInputText[StartPosition]=#32) and ((StartPosition-InputPosition)<3) do begin
+   inc(StartPosition);
+  end;
 
-   ListKind:=2;
-
-   case aInputText[InputPosition] of
+  if StartPosition<=aInputToPosition then begin
+   case aInputText[StartPosition] of
     '+','-','*':begin
-     inc(InputPosition);
+     inc(StartPosition);
+     ListKind:=2;
     end;
     '0'..'9':begin
-     inc(InputPosition);
-     while (InputPosition<=aInputToPosition) and (aInputText[InputPosition] in ['0'..'9']) do begin
-      inc(InputPosition);
+     inc(StartPosition);
+     while (StartPosition<=aInputToPosition) and (aInputText[StartPosition] in ['0'..'9']) do begin
+      inc(StartPosition);
      end;
-     if (InputPosition<=aInputToPosition) and (aInputText[InputPosition]='.') then begin
-      inc(InputPosition);
+     if (StartPosition<=aInputToPosition) and (aInputText[StartPosition]='.') then begin
+      inc(StartPosition);
+      ListKind:=1;
      end else begin
+      // Not a valid ordered list item
+      result:=0;
       exit;
      end;
-     ListKind:=1;
     end;
     else begin
+     // Not a list item
+     result:=0;
      exit;
     end;
    end;
 
-   if (InputPosition<=aInputToPosition) and (aInputText[InputPosition]=' ') then begin
-    inc(InputPosition);
+   if (StartPosition<=aInputToPosition) and (aInputText[StartPosition]=#32) then begin
+    inc(StartPosition);
+   end else begin
+    // No space after marker
+    result:=0;
+    exit;
+   end;
 
-    if IsNextHeaderLine(aInputText,InputPosition,aInputToPosition)=0 then begin
+   // Skip to beginning of following line
+   EndPosition:=StartPosition;
+   while (EndPosition<=aInputToPosition) and (aInputText[EndPosition]<>#10) do begin
+    inc(EndPosition);
+   end;
 
-     StartPosition:=InputPosition;
-     while (InputPosition<=aInputToPosition) and (aInputText[InputPosition]<>#10) do begin
-      inc(InputPosition);
-     end;
-     StopPosition:=InputPosition;
-     if StartPosition<StopPosition then begin
-      InlineText:=copy(aInputText,StartPosition,StopPosition-StartPosition);
-      for TempIndex:=length(InlineText) downto 1 do begin
-       if InlineText[TempIndex]<>#32 then begin
-        SetLength(InlineText,TempIndex);
-        break;
-       end;
-      end;
-     end else begin
-      InlineText:='';
-     end;
+   // Put first line into working buffer
+   WorkText:=copy(aInputText,StartPosition,(EndPosition-StartPosition)+1);
+   InputPosition:=EndPosition;
 
-     BlockText:='';
+   InEmpty:=false;
+   HasInsideEmpty:=false;
+   SubList:=0;
 
-     ToBlockText:=false;
+   // Process following lines
+   while InputPosition<=aInputToPosition do begin
 
-     if aInputText[InputPosition]=#10 then begin
-      NextPosition:=InputPosition+1;
-     end else begin
-      NextPosition:=InputPosition;
-     end;
-
-     while (InputPosition<=aInputToPosition) and (aInputText[InputPosition]=#10) do begin
-
-      inc(InputPosition);
-
-      StartPosition:=InputPosition;
-      EmptyLine:=true;
-      while InputPosition<=aInputToPosition do begin
-       case aInputText[InputPosition] of
-        #10:begin
-         break;
-        end;
-        #32:begin
-         inc(InputPosition);
-        end;
-        else begin
-         EmptyLine:=false;
-         inc(InputPosition);
-        end;
-       end;
-      end;
-      StopPosition:=InputPosition;
-      if EmptyLine then begin
-       InEmpty:=true;
-       continue;
-      end;
-
-      NewIndentation:=0;
-      while (NewIndentation<4) and ((StartPosition+NewIndentation)<StopPosition) and (aInputText[(StartPosition+NewIndentation)]=#32) do begin
-       inc(NewIndentation);
-      end;
-
-      if IsFencedCode(aInputText,StartPosition,StopPosition-1) then begin
-       InFencedCodeBlock:=not InFencedCodeBlock;
-      end;
-
-      if InFencedCodeBlock then begin
-       NewListKind:=0;
-      end else begin
-       NewListKind:=CheckListItem(aInputText,StartPosition,StopPosition-1);
-      end;
-
-      if InEmpty or
-         ((NewListKind<>0) and
-         (ListKind<>NewListKind)) then begin
-       aLineEnd:=true;
-       break;
-      end;
-
-      if (NewListKind=1) or
-         ((NewListKind=2) and not IsHorizontalRule(aInputText,StartPosition,StopPosition-1)) then begin
-       if InEmpty then begin
-        HasInsideEmpty:=true;
-       end;
-       if Indentation=NewIndentation then begin
-        break;
-       end;
-       ToBlockText:=true;
-      end else if InEmpty then begin
-       if NewIndentation=0 then begin
-        aLineEnd:=true;
-        break;
-       end else begin
-        HasInsideEmpty:=true;
-       end;
-      end;
-
-      InEmpty:=false;
-
-      if ToBlockText then begin
-       BlockText:=BlockText+#10;
-       if (StartPosition+Indentation)<StopPosition then begin
-        BlockText:=BlockText+copy(aInputText,(StartPosition+Indentation),StopPosition-(StartPosition+Indentation));
-        for TempIndex:=length(BlockText) downto 1 do begin
-         if BlockText[TempIndex]<>#32 then begin
-          SetLength(BlockText,TempIndex);
-          break;
-         end;
-        end;
-       end;
-      end else begin
-       InlineText:=InlineText+#10;
-       if (StartPosition+NewIndentation)<StopPosition then begin
-        InlineText:=InlineText+copy(aInputText,StartPosition+NewIndentation,StopPosition-(StartPosition+NewIndentation));
-        for TempIndex:=length(InlineText) downto 1 do begin
-         if InlineText[TempIndex]<>#32 then begin
-          SetLength(InlineText,TempIndex);
-          break;
-         end;
-        end;
-       end;
-      end;
-
-      if aInputText[InputPosition]=#10 then begin
-       NextPosition:=InputPosition+1;
-      end else begin
-       NextPosition:=InputPosition;
-      end;
-
-     end;
-
-     if not assigned(aListParentMarkDownBlock) then begin
-      if ListKind=2 then begin
-       aListParentMarkDownBlock:=NewMarkDownBlock(aParentMarkDownBlock,TMarkdown.TNodeType.UnorderedList,'',0);
-      end else begin
-       aListParentMarkDownBlock:=NewMarkDownBlock(aParentMarkDownBlock,TMarkdown.TNodeType.OrderedList,'',0);
-      end;
-     end;
-     ListItemMarkDownBlock:=NewMarkDownBlock(aListParentMarkDownBlock,TMarkdown.TNodeType.ListItem,'',0);
-     if length(InlineText)>0 then begin
-      if HasInsideEmpty then begin
-       ParseBlock(ListItemMarkDownBlock,InlineText,1,length(InlineText));
-      end else begin
-       ParseInline(ListItemMarkDownBlock,InlineText,1,length(InlineText));
-      end;
-     end;
-     if length(BlockText)>0 then begin
-      ParseBlock(ListItemMarkDownBlock,BlockText,1,length(BlockText));
-     end;
-
-     result:=NextPosition;
-
+    if (InputPosition<=aInputToPosition) and (aInputText[InputPosition]=#10) then begin
+     inc(InputPosition);
     end;
+
+    if InputPosition>aInputToPosition then begin
+     break;
+    end;
+
+    EndPosition:=InputPosition;
+    while (EndPosition<=aInputToPosition) and (aInputText[EndPosition]<>#10) do begin
+     inc(EndPosition);
+    end;
+
+    // Process empty line
+    if InputPosition=EndPosition then begin
+     InEmpty:=true;
+     InputPosition:=EndPosition;
+     continue;
+    end;
+
+    // Calculate indentation
+    NewIndentation:=0;
+    while (NewIndentation<4) and ((InputPosition+NewIndentation)<=aInputToPosition) and (aInputText[InputPosition+NewIndentation]=#32) do begin
+     inc(NewIndentation);
+    end;
+    if (InputPosition<=aInputToPosition) and (aInputText[InputPosition]=#9) then begin
+     NewIndentationOffset:=1;
+     NewIndentation:=8;
+    end else begin
+     NewIndentationOffset:=NewIndentation;
+    end;
+
+    // Check for new item
+    NewListKind:=CheckListItem(aInputText,InputPosition+NewIndentationOffset,EndPosition-1);
+    if (NewListKind=1) or ((NewListKind=2) and not IsHorizontalRule(aInputText,InputPosition+NewIndentationOffset,EndPosition-1)) then begin
+     if InEmpty then begin
+      HasInsideEmpty:=true;
+     end;
+     if NewIndentation=Indentation then begin
+      // Following item must have same indentation - break here
+      break;
+     end;
+     if SubList=0 then begin
+      SubList:=length(WorkText);
+     end else if InEmpty then begin
+      WorkText:=WorkText+#10;
+     end;
+    end else if InEmpty and (NewIndentationOffset<4) and ((InputPosition>aInputToPosition) or ((InputPosition<=aInputToPosition) and (aInputText[InputPosition]<>#9))) then begin
+     // Join only indented stuff after empty lines
+     aLineEnd:=true;
+     break;
+    end else if InEmpty then begin
+     WorkText:=WorkText+#10;
+     HasInsideEmpty:=true;
+    end;
+
+    InEmpty:=false;
+
+    WorkText:=WorkText+copy(aInputText,InputPosition+NewIndentationOffset,(EndPosition-(InputPosition+NewIndentationOffset))+1);
+
+    InputPosition:=EndPosition;
 
    end;
 
+   // Create the list container if needed
+   if not assigned(aListParentMarkDownBlock) then begin
+    if ListKind=1 then begin
+     aListParentMarkDownBlock:=NewMarkDownBlock(aParentMarkDownBlock,TMarkdown.TNodeType.OrderedList,'',0);
+    end else begin
+     aListParentMarkDownBlock:=NewMarkDownBlock(aParentMarkDownBlock,TMarkdown.TNodeType.UnorderedList,'',0);
+    end;
+   end;
+
+   // Create list item
+   ListItemMarkDownBlock:=NewMarkDownBlock(aListParentMarkDownBlock,TMarkdown.TNodeType.ListItem,'',0);
+
+   // Set flags for rendering
+   if HasInsideEmpty then begin
+   end;
+
+   WorkText:=TrimRight(WorkText);
+
+   if pos(#10,WorkText)>0 then begin
+    aListBlock:=true;
+   end;
+
+   // Render li contents
+   if aListBlock then begin
+    // Block li - parse as block content
+    if (SubList>0) and (SubList<length(WorkText)) then begin
+     ParseBlock(ListItemMarkDownBlock,copy(WorkText,1,SubList),1,SubList);
+     ParseBlock(ListItemMarkDownBlock,copy(WorkText,SubList+1,length(WorkText)-SubList),1,length(WorkText)-SubList);
+    end else begin
+     ParseBlock(ListItemMarkDownBlock,WorkText,1,length(WorkText));
+    end;
+   end else begin
+    // Inline li - parse as inline content
+    if (SubList>0) and (SubList<length(WorkText)) then begin
+     ParseInline(ListItemMarkDownBlock,copy(WorkText,1,SubList),1,SubList);
+     ParseBlock(ListItemMarkDownBlock,copy(WorkText,SubList+1,length(WorkText)-SubList),1,length(WorkText)-SubList);
+    end else begin
+     ParseInline(ListItemMarkDownBlock,WorkText,1,length(WorkText));
+    end;
+   end;
+
   end;
+
  end;
+
+ result:=InputPosition;
+
 end;
 
 function TMarkdown.ParseParagraph(const aParentMarkDownBlock:TNode;const aInputText:RawByteString;const aInputFromPosition,aInputToPosition:longint):longint;
@@ -6544,406 +6688,511 @@ begin
  InputPosition:=aInputFromPosition;
  EndPosition:=InputPosition;
  while InputPosition<=aInputToPosition do begin
-  while (EndPosition<=aInputToPosition) and not (aInputText[EndPosition] in ['*','_','~','=','`',#10,'!','[','<','\','&','^']) do begin
-   inc(EndPosition);
-  end;
-  if InputPosition<=EndPosition then begin
-   if InputPosition<EndPosition then begin
-    NewPosition:=EndPosition;
-    while ((EndPosition+2)<=aInputToPosition) and ((aInputText[EndPosition-1]=#32) and (aInputText[EndPosition-2]=#32)) do begin
-     dec(EndPosition);
+
+  while EndPosition<=aInputToPosition do begin
+   case aInputText[EndPosition] of
+    '*','_','~','=','`',#10,'!','[','<','\','&','^':begin
+     break;
     end;
+    else begin
+     inc(EndPosition);
+    end;
+   end;
+  end;
+
+  if InputPosition<=EndPosition then begin
+
+   if InputPosition<EndPosition then begin
+
+    NewPosition:=EndPosition;
+
+{   if (NewPosition<=aInputToPosition) and (aInputText[NewPosition]=#10) then begin
+     while (EndPosition>=InputPosition) and
+           ((EndPosition-2)>=aInputFromPosition) and
+           ((aInputText[EndPosition-1]=#32) and (aInputText[EndPosition-2]=#32)) do begin
+      dec(EndPosition);
+     end;
+    end;}
     BlockText:=copy(aInputText,InputPosition,EndPosition-InputPosition);
+
     if (aParentMarkDownBlock.Children.Count>0) and (aParentMarkDownBlock.Children[aParentMarkDownBlock.Children.Count-1].BlockType=TMarkdown.TNodeType.Text) then begin
      aParentMarkDownBlock.Children[aParentMarkDownBlock.Children.Count-1].fStringData:=aParentMarkDownBlock.Children[aParentMarkDownBlock.Children.Count-1].fStringData+BlockText;
     end else begin
      NewMarkDownBlock(aParentMarkDownBlock,TMarkdown.TNodeType.Text,BlockText,0);
     end;
+
     InputPosition:=NewPosition;
+
    end;
+
    if InputPosition<=aInputToPosition then begin
-    case aInputText[InputPosition] of
-     '*','_','~','=':begin
-      if (((EndPosition-1)<aInputFromPosition) or (aInputText[EndPosition-1] in [#32,'>'])) then begin
-       EmphasisChar:=aInputText[EndPosition];
-       if ((EndPosition+1)<=aInputToPosition) and
-          (aInputText[EndPosition+1]<>EmphasisChar) then begin
-        if (not (EmphasisChar in ['~','='])) and (aInputText[EndPosition+1]<>#32) then begin
-         NewPosition:=ParseEmphasis1(aParentMarkDownBlock,aInputText,EndPosition+1,aInputToPosition,EmphasisChar);
-         if NewPosition>EndPosition then begin
-          InputPosition:=NewPosition;
-          EndPosition:=NewPosition;
-          continue;
+
+    if ((aInputText[InputPosition]='~') or (aInputText[InputPosition]='`')) and IsFencedCode(aInputText,InputPosition,aInputToPosition) then begin
+
+     NewPosition:=ParseFencedCode(aParentMarkDownBlock,aInputText,InputPosition,aInputToPosition);
+     if NewPosition>0 then begin
+      InputPosition:=NewPosition;
+      EndPosition:=InputPosition;
+      continue;
+     end;
+
+    end;
+
+    begin
+
+     case aInputText[InputPosition] of
+
+      // Emphasis
+      '*','_','~','=':begin
+       if (((EndPosition-1)<aInputFromPosition) or (aInputText[EndPosition-1] in [#32,'>'])) then begin
+        EmphasisChar:=aInputText[EndPosition];
+        if ((EndPosition+1)<=aInputToPosition) and
+           (aInputText[EndPosition+1]<>EmphasisChar) then begin
+         if (not (EmphasisChar in ['~','='])) and (aInputText[EndPosition+1]<>#32) then begin
+          NewPosition:=ParseEmphasis1(aParentMarkDownBlock,aInputText,EndPosition+1,aInputToPosition,EmphasisChar);
+          if NewPosition>EndPosition then begin
+           InputPosition:=NewPosition;
+           EndPosition:=NewPosition;
+           continue;
+          end;
+         end;
+        end else if ((EndPosition+2)<=aInputToPosition) and
+                    (aInputText[EndPosition+1]=EmphasisChar) and
+                    (aInputText[EndPosition+2]<>EmphasisChar) then begin
+         if aInputText[EndPosition+2]<>#32 then begin
+          NewPosition:=ParseEmphasis2(aParentMarkDownBlock,aInputText,EndPosition+2,aInputToPosition,EmphasisChar);
+          if NewPosition>EndPosition then begin
+           InputPosition:=NewPosition;
+           EndPosition:=NewPosition;
+           continue;
+          end;
+         end;
+        end else if ((EndPosition+3)<=aInputToPosition) and
+                    (aInputText[EndPosition+1]=EmphasisChar) and
+                    (aInputText[EndPosition+2]=EmphasisChar) and
+                    (aInputText[EndPosition+3]<>EmphasisChar) then begin
+         if (not (EmphasisChar in ['~','='])) and (aInputText[EndPosition+3]<>#32) then begin
+          NewPosition:=ParseEmphasis3(aParentMarkDownBlock,aInputText,EndPosition+3,aInputToPosition,EmphasisChar);
+          if NewPosition>EndPosition then begin
+           InputPosition:=NewPosition;
+           EndPosition:=NewPosition;
+           continue;
+          end;
          end;
         end;
-       end else if ((EndPosition+2)<=aInputToPosition) and
-                   (aInputText[EndPosition+1]=EmphasisChar) and
-                   (aInputText[EndPosition+2]<>EmphasisChar) then begin
-        if aInputText[EndPosition+2]<>#32 then begin
-         NewPosition:=ParseEmphasis2(aParentMarkDownBlock,aInputText,EndPosition+2,aInputToPosition,EmphasisChar);
-         if NewPosition>EndPosition then begin
-          InputPosition:=NewPosition;
-          EndPosition:=NewPosition;
-          continue;
-         end;
-        end;
-       end else if ((EndPosition+3)<=aInputToPosition) and
-                   (aInputText[EndPosition+1]=EmphasisChar) and
-                   (aInputText[EndPosition+2]=EmphasisChar) and
-                   (aInputText[EndPosition+3]<>EmphasisChar) then begin
-        if (not (EmphasisChar in ['~','='])) and (aInputText[EndPosition+3]<>#32) then begin
-         NewPosition:=ParseEmphasis3(aParentMarkDownBlock,aInputText,EndPosition+3,aInputToPosition,EmphasisChar);
-         if NewPosition>EndPosition then begin
-          InputPosition:=NewPosition;
-          EndPosition:=NewPosition;
-          continue;
-         end;
-        end;
+       end else begin
+        // Handle standalon char that doesn't form a valid emphasis pattern
+        NewMarkDownBlock(aParentMarkDownBlock,TMarkdown.TNodeType.Text,aInputText[EndPosition],0);
+        inc(EndPosition);
+        InputPosition:=EndPosition;
+        continue;
        end;
       end;
-     end;
-     '`':begin
-      TempPosition:=EndPosition;
-      Count:=0;
-      while (TempPosition<=aInputToPosition) and (aInputText[TempPosition]='`') do begin
-       inc(TempPosition);
-       inc(Count);
-      end;
-      if Count>0 then begin
-       StartPosition:=TempPosition;
-       NewPosition:=0;
-       while TempPosition<=aInputToPosition do begin
-        if aInputText[TempPosition]='`' then begin
-         NewPosition:=TempPosition;
-         break;
-        end;
+
+      // Codespan
+      '`':begin
+       TempPosition:=EndPosition;
+       Count:=0;
+       while (TempPosition<=aInputToPosition) and (aInputText[TempPosition]='`') do begin
         inc(TempPosition);
+        inc(Count);
        end;
-       if (NewPosition>=StartPosition) and (NewPosition<=aInputToPosition) then begin
-        StopPosition:=NewPosition;
-        TempPosition:=NewPosition;
-        while (TempPosition<=aInputToPosition) and (aInputText[TempPosition]='`') do begin
-         inc(TempPosition);
-         dec(Count);
-        end;
-        if Count=0 then begin
-         EndPosition:=TempPosition;
-         InputPosition:=EndPosition;
-         while (StartPosition<StopPosition) and (aInputText[StartPosition]=#32) do begin
-          inc(StartPosition);
-         end;
-         while (StartPosition<StopPosition) and (aInputText[StopPosition-1]=#32) do begin
-          dec(StopPosition);
-         end;
-         if StartPosition<StopPosition then begin
-          NewMarkDownBlock(aParentMarkDownBlock,TMarkdown.TNodeType.CodeSpan,copy(aInputText,StartPosition,StopPosition-StartPosition),0);
-         end else begin
-          NewMarkDownBlock(aParentMarkDownBlock,TMarkdown.TNodeType.CodeSpan,'',0);
-         end;
-         continue;
-        end;
-       end;
-      end;
-     end;
-     #10:begin
-      if ((EndPosition-2)>=aInputFromPosition) and (aInputText[EndPosition-1]=#32) and (aInputText[EndPosition-2]=#32) then begin
-       if (aParentMarkDownBlock.Children.Count>0) and (aParentMarkDownBlock.Children[aParentMarkDownBlock.Children.Count-1].BlockType=TMarkdown.TNodeType.Text) then begin
-        for TempIndex:=length(aParentMarkDownBlock.Children[aParentMarkDownBlock.Children.Count-1].fStringData) downto 1 do begin
-         if aParentMarkDownBlock.Children[aParentMarkDownBlock.Children.Count-1].fStringData[TempIndex]<>#32 then begin
-          SetLength(aParentMarkDownBlock.Children[aParentMarkDownBlock.Children.Count-1].fStringData,TempIndex);
+       if Count>0 then begin
+        StartPosition:=TempPosition;
+        NewPosition:=0;
+        while TempPosition<=aInputToPosition do begin
+         if aInputText[TempPosition]='`' then begin
+          NewPosition:=TempPosition;
           break;
          end;
+         inc(TempPosition);
+        end;
+        if (NewPosition>=StartPosition) and (NewPosition<=aInputToPosition) then begin
+         StopPosition:=NewPosition;
+         TempPosition:=NewPosition;
+         while (TempPosition<=aInputToPosition) and (aInputText[TempPosition]='`') do begin
+          inc(TempPosition);
+          dec(Count);
+         end;
+         if Count=0 then begin
+          EndPosition:=TempPosition;
+          InputPosition:=EndPosition;
+          while (StartPosition<StopPosition) and (aInputText[StartPosition]=#32) do begin
+           inc(StartPosition);
+          end;
+          while (StartPosition<StopPosition) and (aInputText[StopPosition-1]=#32) do begin
+           dec(StopPosition);
+          end;
+          if StartPosition<StopPosition then begin
+           NewMarkDownBlock(aParentMarkDownBlock,TMarkdown.TNodeType.CodeSpan,copy(aInputText,StartPosition,StopPosition-StartPosition),0);
+          end else begin
+           NewMarkDownBlock(aParentMarkDownBlock,TMarkdown.TNodeType.CodeSpan,'',0);
+          end;
+          continue;
+         end;
         end;
        end;
-       NewMarkDownBlock(aParentMarkDownBlock,TMarkdown.TNodeType.LineBreak,'',0);
-       inc(EndPosition);
-       InputPosition:=EndPosition;
-       continue;
       end;
-     end;
-     '!','[':begin
-      TempPosition:=EndPosition;
-      if (((TempPosition+1)<=aInputToPosition) and (aInputText[TempPosition]='!') and (aInputText[TempPosition+1]='[')) or
-         ((TempPosition<=aInputToPosition) and (aInputText[TempPosition]='[')) then begin
-       if (TempPosition<=aInputToPosition) and (aInputText[TempPosition]='!')then begin
-        inc(TempPosition);
-        IsImage:=true;
-       end else begin
-        IsImage:=false;
-       end;
-       if (TempPosition<=aInputToPosition) and (aInputText[TempPosition]='[') then begin
-        inc(TempPosition);
-        StartPosition:=TempPosition;
-        StopPosition:=TempPosition;
-        Count:=1;
-        while TempPosition<=aInputToPosition do begin
-         case aInputText[TempPosition] of
-          '\':begin
-           inc(TempPosition);
-           if (TempPosition<=aInputToPosition) and (aInputText[TempPosition] in ['[',']']) then begin
-            inc(TempPosition);
-           end;
-          end;
-          '[':begin
-           inc(Count);
-           inc(TempPosition);
-          end;
-          ']':begin
-           dec(Count);
-           StopPosition:=TempPosition;
-           inc(TempPosition);
-           if Count=0 then begin
-            break;
-           end;
-          end;
-          else begin
-           inc(TempPosition);
+
+      // Linebreak
+      #10:begin
+
+       if ((InputPosition-2)>=aInputFromPosition) and (aInputText[InputPosition-1]=#32) and (aInputText[InputPosition-2]=#32) then begin
+
+        // Hard line break (two spaces before newline)
+
+        // Trim right spaces
+        if (aParentMarkDownBlock.Children.Count>0) and (aParentMarkDownBlock.Children[aParentMarkDownBlock.Children.Count-1].BlockType=TMarkdown.TNodeType.Text) then begin
+         for TempIndex:=length(aParentMarkDownBlock.Children[aParentMarkDownBlock.Children.Count-1].fStringData) downto 1 do begin
+          if aParentMarkDownBlock.Children[aParentMarkDownBlock.Children.Count-1].fStringData[TempIndex]<>#32 then begin
+           SetLength(aParentMarkDownBlock.Children[aParentMarkDownBlock.Children.Count-1].fStringData,TempIndex);
+           break;
           end;
          end;
         end;
-        if (StartPosition<StopPosition) and
-           ((StopPosition<=aInputToPosition) and (aInputText[StopPosition]=']')) then begin
-         LinkText:=copy(aInputText,StartPosition,StopPosition-StartPosition);
-         if TempPosition<=aInputToPosition then begin
-          if ((TempPosition+2)<=aInputToPosition) and
-             (aInputText[TempPosition+0]=' ') and
-             (aInputText[TempPosition+1] in ['(','[',':']) then begin
-           inc(TempPosition);
-          end;
+
+        // Line break - unless it's trailing
+        TempPosition:=InputPosition+1;
+
+        // Skip any whitespace after the newline to check for content
+        while (TempPosition<=aInputToPosition) and (aInputText[TempPosition] in [#9,#32]) do begin
+         inc(TempPosition);
+        end;
+
+        // Only a line break if there's actual content after it
+        if (TempPosition+1)<=aInputToPosition then begin
+
+         // Insert line break
+         NewMarkDownBlock(aParentMarkDownBlock,TMarkdown.TNodeType.LineBreak,'',0);
+
+        end;
+
+        inc(InputPosition);
+        EndPosition:=InputPosition;
+
+        continue;
+
+       end else begin
+
+        // Regular newline - preserve it in the output unless it's trailing
+        TempPosition:=InputPosition+1;
+
+        // Skip any whitespace after the newline to check for content
+        while (TempPosition<=aInputToPosition) and (aInputText[TempPosition] in [#9,#32]) do begin
+         inc(TempPosition);
+        end;
+
+        // Only preserve the newline if there's actual content after it
+        if (TempPosition+1)<=aInputToPosition then begin
+         // There's content after this newline, so create a SoftBreak node
+         NewMarkDownBlock(aParentMarkDownBlock,TMarkdown.TNodeType.SoftBreak,'',0);
+        end;
+
+        // If there's no content after the newline, we skip it (trim trailing newlines)
+
+        inc(InputPosition);
+        EndPosition:=InputPosition;
+        continue;
+
+       end;
+
+      end;
+
+      // Link
+      '!','[':begin
+       TempPosition:=EndPosition;
+       if (((TempPosition+1)<=aInputToPosition) and (aInputText[TempPosition]='!') and (aInputText[TempPosition+1]='[')) or
+          ((TempPosition<=aInputToPosition) and (aInputText[TempPosition]='[')) then begin
+        if (TempPosition<=aInputToPosition) and (aInputText[TempPosition]='!')then begin
+         inc(TempPosition);
+         IsImage:=true;
+        end else begin
+         IsImage:=false;
+        end;
+        if (TempPosition<=aInputToPosition) and (aInputText[TempPosition]='[') then begin
+         inc(TempPosition);
+         StartPosition:=TempPosition;
+         StopPosition:=TempPosition;
+         Count:=1;
+         while TempPosition<=aInputToPosition do begin
           case aInputText[TempPosition] of
-           '(':begin
+           '\':begin
             inc(TempPosition);
-            StartPosition:=TempPosition;
-            StopPosition:=TempPosition;
-            Count:=1;
-            while TempPosition<=aInputToPosition do begin
-             case aInputText[TempPosition] of
-              '\':begin
-               inc(TempPosition);
-               if (TempPosition<=aInputToPosition) and (aInputText[TempPosition] in ['(',')']) then begin
-                inc(TempPosition);
-               end;
-              end;
-              '(':begin
-               inc(Count);
-               inc(TempPosition);
-              end;
-              ')':begin
-               dec(Count);
-               StopPosition:=TempPosition;
-               inc(TempPosition);
-               if Count=0 then begin
-                break;
-               end;
-              end;
-              else begin
-               inc(TempPosition);
-              end;
-             end;
-            end;
-            if (StartPosition<StopPosition) and
-               ((StopPosition<=aInputToPosition) and (aInputText[StopPosition]=')')) then begin
-             Link:=copy(aInputText,StartPosition,StopPosition-StartPosition);
-             if IsImage then begin
-              MarkDownBlock:=NewMarkDownBlock(aParentMarkDownBlock,TMarkdown.TNodeType.Image,Link,0);
-             end else begin
-              MarkDownBlock:=NewMarkDownBlock(aParentMarkDownBlock,TMarkdown.TNodeType.Link,Link,0);
-             end;
-             ParseInline(MarkDownBlock,LinkText,1,length(LinkText));
-             InputPosition:=TempPosition;
-             EndPosition:=TempPosition;
-             continue;
+            if (TempPosition<=aInputToPosition) and (aInputText[TempPosition] in ['[',']']) then begin
+             inc(TempPosition);
             end;
            end;
            '[':begin
+            inc(Count);
             inc(TempPosition);
-            StartPosition:=TempPosition;
+           end;
+           ']':begin
+            dec(Count);
             StopPosition:=TempPosition;
-            Count:=1;
-            while TempPosition<=aInputToPosition do begin
-             case aInputText[TempPosition] of
-              '\':begin
-               inc(TempPosition);
-               if (TempPosition<=aInputToPosition) and (aInputText[TempPosition] in ['[',']']) then begin
+            inc(TempPosition);
+            if Count=0 then begin
+             break;
+            end;
+           end;
+           else begin
+            inc(TempPosition);
+           end;
+          end;
+         end;
+         if (StartPosition<StopPosition) and
+            ((StopPosition<=aInputToPosition) and (aInputText[StopPosition]=']')) then begin
+          LinkText:=copy(aInputText,StartPosition,StopPosition-StartPosition);
+          if TempPosition<=aInputToPosition then begin
+           if ((TempPosition+2)<=aInputToPosition) and
+              (aInputText[TempPosition+0]=' ') and
+              (aInputText[TempPosition+1] in ['(','[',':']) then begin
+            inc(TempPosition);
+           end;
+           case aInputText[TempPosition] of
+            '(':begin
+             inc(TempPosition);
+             StartPosition:=TempPosition;
+             StopPosition:=TempPosition;
+             Count:=1;
+             while TempPosition<=aInputToPosition do begin
+              case aInputText[TempPosition] of
+               '\':begin
+                inc(TempPosition);
+                if (TempPosition<=aInputToPosition) and (aInputText[TempPosition] in ['(',')']) then begin
+                 inc(TempPosition);
+                end;
+               end;
+               '(':begin
+                inc(Count);
+                inc(TempPosition);
+               end;
+               ')':begin
+                dec(Count);
+                StopPosition:=TempPosition;
+                inc(TempPosition);
+                if Count=0 then begin
+                 break;
+                end;
+               end;
+               else begin
                 inc(TempPosition);
                end;
               end;
-              '[':begin
-               inc(Count);
-               inc(TempPosition);
-              end;
-              ']':begin
-               dec(Count);
-               StopPosition:=TempPosition;
-               inc(TempPosition);
-               if Count=0 then begin
-                break;
-               end;
-              end;
-              else begin
-               inc(TempPosition);
-              end;
              end;
-            end;
-            if (StartPosition<StopPosition) and
-               ((StopPosition<=aInputToPosition) and (aInputText[StopPosition]=']')) then begin
-             Link:=copy(aInputText,StartPosition,StopPosition-StartPosition);
-             if IsImage then begin
-              MarkDownBlock:=NewMarkDownBlock(aParentMarkDownBlock,TMarkdown.TNodeType.ReferenceImage,Link,0);
-             end else begin
-              MarkDownBlock:=NewMarkDownBlock(aParentMarkDownBlock,TMarkdown.TNodeType.ReferenceLink,Link,0);
-             end;
-             ParseInline(MarkDownBlock,LinkText,1,length(LinkText));
-             InputPosition:=TempPosition;
-             EndPosition:=TempPosition;
-             continue;
-            end;
-           end;
-           ':':begin
-            inc(TempPosition);
-            while (TempPosition<=aInputToPosition) and (aInputText[TempPosition]=#32) do begin
-             inc(TempPosition);
-            end;
-            StartPosition:=TempPosition;
-            while (TempPosition<=aInputToPosition) and (aInputText[TempPosition]<>#10) do begin
-             inc(TempPosition);
-            end;
-            StopPosition:=TempPosition;
-            if StartPosition<StopPosition then begin
-             while (StartPosition<StopPosition) and (aInputText[StopPosition-1]=#32) do begin
-              dec(StopPosition);
-             end;
-             if StartPosition<StopPosition then begin
+             if (StartPosition<StopPosition) and
+                ((StopPosition<=aInputToPosition) and (aInputText[StopPosition]=')')) then begin
               Link:=copy(aInputText,StartPosition,StopPosition-StartPosition);
-              fLinkStringList.Values[LowerCase(Trim(LinkText))]:=Link;
+              if IsImage then begin
+               MarkDownBlock:=NewMarkDownBlock(aParentMarkDownBlock,TMarkdown.TNodeType.Image,Link,0);
+              end else begin
+               MarkDownBlock:=NewMarkDownBlock(aParentMarkDownBlock,TMarkdown.TNodeType.Link,Link,0);
+              end;
+              ParseInline(MarkDownBlock,LinkText,1,length(LinkText));
               InputPosition:=TempPosition;
               EndPosition:=TempPosition;
               continue;
              end;
             end;
-           end;
-           else begin
-            if IsImage then begin
-             MarkDownBlock:=NewMarkDownBlock(aParentMarkDownBlock,TMarkdown.TNodeType.ReferenceImage,LinkText,0);
-            end else begin
-             MarkDownBlock:=NewMarkDownBlock(aParentMarkDownBlock,TMarkdown.TNodeType.ReferenceLink,LinkText,0);
-            end;
-            ParseInline(MarkDownBlock,LinkText,1,length(LinkText));
-            InputPosition:=TempPosition;
-            EndPosition:=TempPosition;
-            continue;
-           end;
-          end;
-         end;
-        end;
-       end;
-      end;
-     end;
-     '<':begin
-      TempPosition:=EndPosition;
-      if TempPosition<=aInputToPosition then begin
-       if ((TempPosition+3)<=aInputToPosition) and
-          (aInputText[TempPosition+1]='!') and
-          (aInputText[TempPosition+2]='-') and
-          (aInputText[TempPosition+3]='-') then begin
-        inc(TempPosition,4);
-        OK:=false;
-        while TempPosition<=aInputToPosition do begin
-         if ((TempPosition+2)<=aInputToPosition) and
-            (aInputText[TempPosition+0]='-') and
-            (aInputText[TempPosition+1]='-') and
-            (aInputText[TempPosition+2]='>') then begin
-          inc(TempPosition,3);
-          NewMarkDownBlock(aParentMarkDownBlock,TMarkdown.TNodeType.HTMLTag,copy(aInputText,EndPosition,TempPosition-EndPosition),1);
-          EndPosition:=TempPosition;
-          InputPosition:=EndPosition;
-          OK:=true;
-          break;
-         end else begin
-          inc(TempPosition);
-         end;
-        end;
-        if OK then begin
-         continue;
-        end;
-       end else begin
-        inc(TempPosition);
-        if (TempPosition<=aInputToPosition) and (aInputText[TempPosition]='/') then begin
-         inc(TempPosition);
-         Count:=0;
-         while (TempPosition<=aInputToPosition) and (aInputText[TempPosition] in ['A'..'Z','a'..'z','0'..'9']) do begin
-          inc(TempPosition);
-          inc(Count);
-         end;
-         if Count>0 then begin
-          while (TempPosition<=aInputToPosition) and (aInputText[TempPosition]=#32) do begin
-           inc(TempPosition);
-          end;
-          if (TempPosition<=aInputToPosition) and (aInputText[TempPosition]='>') then begin
-           inc(TempPosition);
-           NewMarkDownBlock(aParentMarkDownBlock,TMarkdown.TNodeType.HTMLTag,copy(aInputText,EndPosition,TempPosition-EndPosition),2);
-           EndPosition:=TempPosition;
-           InputPosition:=EndPosition;
-           continue;
-          end;
-         end;
-        end else begin
-         Count:=0;
-         while (TempPosition<=aInputToPosition) and (aInputText[TempPosition] in ['A'..'Z','a'..'z','0'..'9']) do begin
-          inc(TempPosition);
-          inc(Count);
-         end;
-         if Count>0 then begin
-          while (TempPosition<=aInputToPosition) and (aInputText[TempPosition]<>'>') do begin
-           while (TempPosition<=aInputToPosition) and (aInputText[TempPosition]=#32) do begin
-            inc(TempPosition);
-           end;
-           if (TempPosition<=aInputToPosition) and (aInputText[TempPosition] in ['A'..'Z','a'..'z','0'..'9']) then begin
-            Count:=0;
-            while (TempPosition<=aInputToPosition) and (aInputText[TempPosition] in ['A'..'Z','a'..'z','0'..'9']) do begin
+            '[':begin
              inc(TempPosition);
-             inc(Count);
+             StartPosition:=TempPosition;
+             StopPosition:=TempPosition;
+             Count:=1;
+             while TempPosition<=aInputToPosition do begin
+              case aInputText[TempPosition] of
+               '\':begin
+                inc(TempPosition);
+                if (TempPosition<=aInputToPosition) and (aInputText[TempPosition] in ['[',']']) then begin
+                 inc(TempPosition);
+                end;
+               end;
+               '[':begin
+                inc(Count);
+                inc(TempPosition);
+               end;
+               ']':begin
+                dec(Count);
+                StopPosition:=TempPosition;
+                inc(TempPosition);
+                if Count=0 then begin
+                 break;
+                end;
+               end;
+               else begin
+                inc(TempPosition);
+               end;
+              end;
+             end;
+             if (StartPosition<StopPosition) and
+                ((StopPosition<=aInputToPosition) and (aInputText[StopPosition]=']')) then begin
+              Link:=copy(aInputText,StartPosition,StopPosition-StartPosition);
+              if IsImage then begin
+               MarkDownBlock:=NewMarkDownBlock(aParentMarkDownBlock,TMarkdown.TNodeType.ReferenceImage,Link,0);
+              end else begin
+               MarkDownBlock:=NewMarkDownBlock(aParentMarkDownBlock,TMarkdown.TNodeType.ReferenceLink,Link,0);
+              end;
+              ParseInline(MarkDownBlock,LinkText,1,length(LinkText));
+              InputPosition:=TempPosition;
+              EndPosition:=TempPosition;
+              continue;
+             end;
             end;
-            if Count>0 then begin
+            ':':begin
+             inc(TempPosition);
              while (TempPosition<=aInputToPosition) and (aInputText[TempPosition]=#32) do begin
               inc(TempPosition);
              end;
-             if (TempPosition<=aInputToPosition) and (aInputText[TempPosition]='=') then begin
+             StartPosition:=TempPosition;
+             while (TempPosition<=aInputToPosition) and (aInputText[TempPosition]<>#10) do begin
               inc(TempPosition);
-              if TempPosition<=aInputToPosition then begin
-               case aInputText[TempPosition] of
-                '''':begin
-                 inc(TempPosition);
-                 while (TempPosition<=aInputToPosition) and (aInputText[TempPosition]<>'''') do begin
+             end;
+             StopPosition:=TempPosition;
+             if StartPosition<StopPosition then begin
+              while (StartPosition<StopPosition) and (aInputText[StopPosition-1]=#32) do begin
+               dec(StopPosition);
+              end;
+              if StartPosition<StopPosition then begin
+               Link:=copy(aInputText,StartPosition,StopPosition-StartPosition);
+               fLinkStringList.Values[LowerCase(Trim(LinkText))]:=Link;
+               InputPosition:=TempPosition;
+               EndPosition:=TempPosition;
+               continue;
+              end;
+             end;
+            end;
+            else begin
+             if IsImage then begin
+              MarkDownBlock:=NewMarkDownBlock(aParentMarkDownBlock,TMarkdown.TNodeType.ReferenceImage,LinkText,0);
+             end else begin
+              MarkDownBlock:=NewMarkDownBlock(aParentMarkDownBlock,TMarkdown.TNodeType.ReferenceLink,LinkText,0);
+             end;
+             ParseInline(MarkDownBlock,LinkText,1,length(LinkText));
+             InputPosition:=TempPosition;
+             EndPosition:=TempPosition;
+             continue;
+            end;
+           end;
+          end;
+         end;
+        end;
+       end else begin
+        // Handle standalone ! or [ that doesn't form a valid link/image pattern
+        NewMarkDownBlock(aParentMarkDownBlock,TMarkdown.TNodeType.Text,aInputText[EndPosition],0);
+        inc(EndPosition);
+        InputPosition:=EndPosition;
+        continue;
+       end;
+      end;
+
+      // Langle Tag
+      '<':begin
+       TempPosition:=EndPosition;
+       if TempPosition<=aInputToPosition then begin
+        if ((TempPosition+3)<=aInputToPosition) and
+           (aInputText[TempPosition+1]='!') and
+           (aInputText[TempPosition+2]='-') and
+           (aInputText[TempPosition+3]='-') then begin
+         inc(TempPosition,4);
+         OK:=false;
+         while TempPosition<=aInputToPosition do begin
+          if ((TempPosition+2)<=aInputToPosition) and
+             (aInputText[TempPosition+0]='-') and
+             (aInputText[TempPosition+1]='-') and
+             (aInputText[TempPosition+2]='>') then begin
+           inc(TempPosition,3);
+           NewMarkDownBlock(aParentMarkDownBlock,TMarkdown.TNodeType.HTMLTag,copy(aInputText,EndPosition,TempPosition-EndPosition),1);
+           EndPosition:=TempPosition;
+           InputPosition:=EndPosition;
+           OK:=true;
+           break;
+          end else begin
+           inc(TempPosition);
+          end;
+         end;
+         if OK then begin
+          continue;
+         end;
+        end else begin
+         inc(TempPosition);
+         if (TempPosition<=aInputToPosition) and (aInputText[TempPosition]='/') then begin
+          inc(TempPosition);
+          Count:=0;
+          while (TempPosition<=aInputToPosition) and (aInputText[TempPosition] in ['A'..'Z','a'..'z','0'..'9']) do begin
+           inc(TempPosition);
+           inc(Count);
+          end;
+          if Count>0 then begin
+           while (TempPosition<=aInputToPosition) and (aInputText[TempPosition]=#32) do begin
+            inc(TempPosition);
+           end;
+           if (TempPosition<=aInputToPosition) and (aInputText[TempPosition]='>') then begin
+            inc(TempPosition);
+            NewMarkDownBlock(aParentMarkDownBlock,TMarkdown.TNodeType.HTMLTag,copy(aInputText,EndPosition,TempPosition-EndPosition),2);
+            EndPosition:=TempPosition;
+            InputPosition:=EndPosition;
+            continue;
+           end;
+          end;
+         end else begin
+          Count:=0;
+          while (TempPosition<=aInputToPosition) and (aInputText[TempPosition] in ['A'..'Z','a'..'z','0'..'9']) do begin
+           inc(TempPosition);
+           inc(Count);
+          end;
+          if Count>0 then begin
+           while (TempPosition<=aInputToPosition) and (aInputText[TempPosition]<>'>') do begin
+            while (TempPosition<=aInputToPosition) and (aInputText[TempPosition]=#32) do begin
+             inc(TempPosition);
+            end;
+            if (TempPosition<=aInputToPosition) and (aInputText[TempPosition] in ['A'..'Z','a'..'z','0'..'9']) then begin
+             Count:=0;
+             while (TempPosition<=aInputToPosition) and (aInputText[TempPosition] in ['A'..'Z','a'..'z','0'..'9']) do begin
+              inc(TempPosition);
+              inc(Count);
+             end;
+             if Count>0 then begin
+              while (TempPosition<=aInputToPosition) and (aInputText[TempPosition]=#32) do begin
+               inc(TempPosition);
+              end;
+              if (TempPosition<=aInputToPosition) and (aInputText[TempPosition]='=') then begin
+               inc(TempPosition);
+               if TempPosition<=aInputToPosition then begin
+                case aInputText[TempPosition] of
+                 '''':begin
                   inc(TempPosition);
+                  while (TempPosition<=aInputToPosition) and (aInputText[TempPosition]<>'''') do begin
+                   inc(TempPosition);
+                  end;
+                  if (TempPosition<=aInputToPosition) and (aInputText[TempPosition]='''') then begin
+                   inc(TempPosition);
+                  end else begin
+                   break;
+                  end;
                  end;
-                 if (TempPosition<=aInputToPosition) and (aInputText[TempPosition]='''') then begin
+                 '"':begin
                   inc(TempPosition);
-                 end else begin
-                  break;
+                  while (TempPosition<=aInputToPosition) and (aInputText[TempPosition]<>'"') do begin
+                   inc(TempPosition);
+                  end;
+                  if (TempPosition<=aInputToPosition) and (aInputText[TempPosition]='"') then begin
+                   inc(TempPosition);
+                  end else begin
+                   break;
+                  end;
+                 end;
+                 else begin
+                  Count:=0;
+                  while (TempPosition<=aInputToPosition) and not (aInputText[TempPosition] in [#32,'>','/']) do begin
+                   inc(Count);
+                   inc(TempPosition);
+                  end;
+                  if Count=0 then begin
+                   break;
+                  end;
                  end;
                 end;
-                '"':begin
-                 inc(TempPosition);
-                 while (TempPosition<=aInputToPosition) and (aInputText[TempPosition]<>'"') do begin
-                  inc(TempPosition);
-                 end;
-                 if (TempPosition<=aInputToPosition) and (aInputText[TempPosition]='"') then begin
-                  inc(TempPosition);
-                 end else begin
-                  break;
-                 end;
-                end;
-                else begin
-                 Count:=0;
-                 while (TempPosition<=aInputToPosition) and not (aInputText[TempPosition] in [#32,'>','/']) do begin
-                  inc(Count);
-                  inc(TempPosition);
-                 end;
-                 if Count=0 then begin
-                  break;
-                 end;
-                end;
+               end else begin
+                break;
                end;
               end else begin
                break;
@@ -6954,62 +7203,77 @@ begin
             end else begin
              break;
             end;
+           end;
+           if (TempPosition<=aInputToPosition) and (aInputText[TempPosition]='/') then begin
+            inc(TempPosition);
+            if (TempPosition<=aInputToPosition) and (aInputText[TempPosition]='>') then begin
+             inc(TempPosition);
+             NewMarkDownBlock(aParentMarkDownBlock,TMarkdown.TNodeType.HTMLTag,copy(aInputText,EndPosition,TempPosition-EndPosition),1);
+             EndPosition:=TempPosition;
+             InputPosition:=EndPosition;
+             continue;
+            end;
            end else begin
-            break;
-           end;
-          end;
-          if (TempPosition<=aInputToPosition) and (aInputText[TempPosition]='/') then begin
-           inc(TempPosition);
-           if (TempPosition<=aInputToPosition) and (aInputText[TempPosition]='>') then begin
-            inc(TempPosition);
-            NewMarkDownBlock(aParentMarkDownBlock,TMarkdown.TNodeType.HTMLTag,copy(aInputText,EndPosition,TempPosition-EndPosition),1);
-            EndPosition:=TempPosition;
-            InputPosition:=EndPosition;
-            continue;
-           end;
-          end else begin
-           if (TempPosition<=aInputToPosition) and (aInputText[TempPosition]='>') then begin
-            inc(TempPosition);
-            NewMarkDownBlock(aParentMarkDownBlock,TMarkdown.TNodeType.HTMLTag,copy(aInputText,EndPosition,TempPosition-EndPosition),0);
-            EndPosition:=TempPosition;
-            InputPosition:=EndPosition;
-            continue;
+            if (TempPosition<=aInputToPosition) and (aInputText[TempPosition]='>') then begin
+             inc(TempPosition);
+             NewMarkDownBlock(aParentMarkDownBlock,TMarkdown.TNodeType.HTMLTag,copy(aInputText,EndPosition,TempPosition-EndPosition),0);
+             EndPosition:=TempPosition;
+             InputPosition:=EndPosition;
+             continue;
+            end;
            end;
           end;
          end;
         end;
        end;
       end;
-     end;
-     '\':begin
-      if ((EndPosition+1)<=aInputToPosition) and (aInputText[EndPosition+1] in ['!','"','#','$','%','&','''','(',')','*','+',',','-','.','/','0'..'9',':',';','<','=','>','?','@','A'..'Z','[','\',']','^','_','`','a'..'z','{','|','}','~']) then begin
-       NewMarkDownBlock(aParentMarkDownBlock,TMarkdown.TNodeType.Text,copy(aInputText,EndPosition+1,1),0);
-       InputPosition:=EndPosition+2;
-       EndPosition:=InputPosition;
-       continue;
+
+      // Escaoe
+      '\':begin
+       if ((EndPosition+1)<=aInputToPosition) and (aInputText[EndPosition+1] in ['!','"','#','$','%','&','''','(',')','*','+',',','-','.','/','0'..'9',':',';','<','=','>','?','@','A'..'Z','[','\',']','^','_','`','a'..'z','{','|','}','~']) then begin
+        NewMarkDownBlock(aParentMarkDownBlock,TMarkdown.TNodeType.Text,copy(aInputText,EndPosition+1,1),0);
+        InputPosition:=EndPosition+2;
+        EndPosition:=InputPosition;
+        continue;
+       end;
       end;
-     end;
-     '&':begin
-      TempPosition:=EndPosition+1;
-      if (TempPosition<=aInputToPosition) and (aInputText[TempPosition]='#') then begin
-       inc(TempPosition);
-       if (TempPosition<=aInputToPosition) and (aInputText[TempPosition]='x') then begin
+
+      // Entity
+      '&':begin
+       TempPosition:=EndPosition+1;
+       if (TempPosition<=aInputToPosition) and (aInputText[TempPosition]='#') then begin
         inc(TempPosition);
-        Count:=0;
-        while (TempPosition<=aInputToPosition) and (aInputText[TempPosition] in ['0'..'9','A'..'F','a'..'f']) do begin
+        if (TempPosition<=aInputToPosition) and (aInputText[TempPosition]='x') then begin
          inc(TempPosition);
-         inc(Count);
-        end;
-        if (Count>0) and (TempPosition<=aInputToPosition) and (aInputText[TempPosition]=';') then begin
-         inc(TempPosition);
-         NewMarkDownBlock(aParentMarkDownBlock,TMarkdown.TNodeType.Entity,copy(aInputText,EndPosition,TempPosition-EndPosition),0);
-         InputPosition:=TempPosition;
-         EndPosition:=InputPosition;
-         continue;
+         Count:=0;
+         while (TempPosition<=aInputToPosition) and (aInputText[TempPosition] in ['0'..'9','A'..'F','a'..'f']) do begin
+          inc(TempPosition);
+          inc(Count);
+         end;
+         if (Count>0) and (TempPosition<=aInputToPosition) and (aInputText[TempPosition]=';') then begin
+          inc(TempPosition);
+          NewMarkDownBlock(aParentMarkDownBlock,TMarkdown.TNodeType.Entity,copy(aInputText,EndPosition,TempPosition-EndPosition),0);
+          InputPosition:=TempPosition;
+          EndPosition:=InputPosition;
+          continue;
+         end;
+        end else begin
+         Count:=0;
+         while (TempPosition<=aInputToPosition) and (aInputText[TempPosition] in ['0'..'9']) do begin
+          inc(TempPosition);
+          inc(Count);
+         end;
+         if (Count>0) and (TempPosition<=aInputToPosition) and (aInputText[TempPosition]=';') then begin
+          inc(TempPosition);
+          NewMarkDownBlock(aParentMarkDownBlock,TMarkdown.TNodeType.Entity,copy(aInputText,EndPosition,TempPosition-EndPosition),0);
+          InputPosition:=TempPosition;
+          EndPosition:=InputPosition;
+          continue;
+         end;
         end;
        end else begin
         Count:=0;
-        while (TempPosition<=aInputToPosition) and (aInputText[TempPosition] in ['0'..'9']) do begin
+        while (TempPosition<=aInputToPosition) and (aInputText[TempPosition] in ['A'..'Z','a'..'z','0'..'9']) do begin
          inc(TempPosition);
          inc(Count);
         end;
@@ -7021,72 +7285,72 @@ begin
          continue;
         end;
        end;
-      end else begin
-       Count:=0;
-       while (TempPosition<=aInputToPosition) and (aInputText[TempPosition] in ['A'..'Z','a'..'z','0'..'9']) do begin
-        inc(TempPosition);
-        inc(Count);
-       end;
-       if (Count>0) and (TempPosition<=aInputToPosition) and (aInputText[TempPosition]=';') then begin
-        inc(TempPosition);
-        NewMarkDownBlock(aParentMarkDownBlock,TMarkdown.TNodeType.Entity,copy(aInputText,EndPosition,TempPosition-EndPosition),0);
-        InputPosition:=TempPosition;
-        EndPosition:=InputPosition;
-        continue;
-       end;
       end;
-     end;
-     '^':begin
-      if ((EndPosition+1)<=aInputToPosition) and (aInputText[EndPosition+1]='(') then begin
-       TempPosition:=EndPosition+2;
-       StartPosition:=TempPosition;
-       Count:=1;
-       while TempPosition<=aInputToPosition do begin
-        case aInputText[TempPosition] of
-         '(':begin
-          inc(Count);
-          inc(TempPosition);
-         end;
-         ')':begin
-          dec(Count);
-          inc(TempPosition);
-          if Count=0 then begin
-           StopPosition:=TempPosition-1;
-           if StartPosition<StopPosition then begin
-            MarkDownBlock:=NewMarkDownBlock(aParentMarkDownBlock,TMarkdown.TNodeType.Subscript,'',0);
-            ParseInline(MarkDownBlock,copy(aInputText,StartPosition,StopPosition-StartPosition),1,StopPosition-StartPosition);
-            InputPosition:=TempPosition;
-            EndPosition:=InputPosition;
+
+      // Subscript
+      '^':begin
+       if ((EndPosition+1)<=aInputToPosition) and (aInputText[EndPosition+1]='(') then begin
+        TempPosition:=EndPosition+2;
+        StartPosition:=TempPosition;
+        Count:=1;
+        while TempPosition<=aInputToPosition do begin
+         case aInputText[TempPosition] of
+          '(':begin
+           inc(Count);
+           inc(TempPosition);
+          end;
+          ')':begin
+           dec(Count);
+           inc(TempPosition);
+           if Count=0 then begin
+            StopPosition:=TempPosition-1;
+            if StartPosition<StopPosition then begin
+             MarkDownBlock:=NewMarkDownBlock(aParentMarkDownBlock,TMarkdown.TNodeType.Subscript,'',0);
+             ParseInline(MarkDownBlock,copy(aInputText,StartPosition,StopPosition-StartPosition),1,StopPosition-StartPosition);
+             InputPosition:=TempPosition;
+             EndPosition:=InputPosition;
+            end;
+            break;
            end;
-           break;
+          end;
+          else begin
+           inc(TempPosition);
           end;
          end;
-         else begin
-          inc(TempPosition);
-         end;
+        end;
+        if Count=0 then begin
+         continue;
+        end;
+       end else begin
+        TempPosition:=EndPosition+1;
+        StartPosition:=TempPosition;
+        while (TempPosition<=aInputToPosition) and (aInputText[TempPosition] in ['A'..'Z','a'..'z','0'..'9']) do begin
+         inc(TempPosition);
+        end;
+        if TempPosition>StartPosition then begin
+         MarkDownBlock:=NewMarkDownBlock(aParentMarkDownBlock,TMarkdown.TNodeType.Subscript,'',0);
+         ParseInline(MarkDownBlock,copy(aInputText,StartPosition,TempPosition-StartPosition),1,TempPosition-StartPosition);
+         InputPosition:=TempPosition;
+         EndPosition:=InputPosition;
+         continue;
         end;
        end;
-       if Count=0 then begin
-        continue;
-       end;
-      end else begin
-       TempPosition:=EndPosition+1;
-       StartPosition:=TempPosition;
-       while (TempPosition<=aInputToPosition) and (aInputText[TempPosition] in ['A'..'Z','a'..'z','0'..'9']) do begin
-        inc(TempPosition);
-       end;
-       if TempPosition>StartPosition then begin
-        MarkDownBlock:=NewMarkDownBlock(aParentMarkDownBlock,TMarkdown.TNodeType.Subscript,'',0);
-        ParseInline(MarkDownBlock,copy(aInputText,StartPosition,TempPosition-StartPosition),1,TempPosition-StartPosition);
-        InputPosition:=TempPosition;
-        EndPosition:=InputPosition;
-        continue;
-       end;
       end;
+
+      // Nothing
+      else begin
+      end;
+
      end;
+
     end;
+
+   end else begin
+    break;
    end;
-  end;
+
+  end; 
+
   inc(InputPosition);
   EndPosition:=InputPosition;
  end;
@@ -7869,3 +8133,5 @@ initialization
 finalization
  FinalizeEntites;
 end.
+
+
