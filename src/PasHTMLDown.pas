@@ -6780,13 +6780,12 @@ begin
           end;
          end;
         end;
-       end else begin
-        // Handle standalone char that doesn't form a valid emphasis pattern
-        NewMarkDownBlock(aParentMarkDownBlock,TMarkdown.TNodeType.Text,aInputText[EndPosition],0);
-        inc(EndPosition);
-        InputPosition:=EndPosition;
-        continue;
        end;
+       // Handle standalone char that doesn't form a valid emphasis pattern
+       NewMarkDownBlock(aParentMarkDownBlock,TMarkdown.TNodeType.Text,aInputText[EndPosition],0);
+       inc(EndPosition);
+       InputPosition:=EndPosition;
+       continue;
       end;
 
       // Codespan
@@ -6831,13 +6830,12 @@ begin
           continue;
          end;
         end;
-       end else begin
-        // Handle standalone char that doesn't form a valid codespan pattern
-        NewMarkDownBlock(aParentMarkDownBlock,TMarkdown.TNodeType.Text,aInputText[EndPosition],0);
-        inc(EndPosition);
-        InputPosition:=EndPosition;
-        continue;
        end;
+       // Handle standalone char that doesn't form a valid codespan pattern
+       NewMarkDownBlock(aParentMarkDownBlock,TMarkdown.TNodeType.Text,aInputText[EndPosition],0);
+       inc(EndPosition);
+       InputPosition:=EndPosition;
+       continue;
       end;
 
       // Linebreak
@@ -7297,6 +7295,11 @@ begin
          continue;
         end;
        end;
+       // Handle standalon char that doesn't form a valid entity pattern
+       NewMarkDownBlock(aParentMarkDownBlock,TMarkdown.TNodeType.Text,aInputText[EndPosition],0);
+       inc(EndPosition);
+       InputPosition:=EndPosition;
+       continue;
       end;
 
       // Subscript
