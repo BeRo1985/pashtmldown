@@ -381,8 +381,9 @@ type
               procedure Add(const aTagParameter:TTagParameter);
               procedure Clear;
               function FindByName(const aName:RawByteString):TTagParameter;
-             published
+             public
               property Items[const aIndex:longint]:TTagParameter read GetItem; default;
+             published
               property Count:longint read fCount;
             end;
 
@@ -400,8 +401,9 @@ type
               destructor Destroy; override;
               procedure Add(const aNode:TNode);
               procedure Clear;
-             published
+             public
               property Items[const aIndex:longint]:TNode read GetItem; default;
+             published
               property Count:longint read fCount;
             end;
 
@@ -496,8 +498,9 @@ type
               destructor Destroy; override;
               procedure Add(const aNode:TNode);
               procedure Clear;
-             published
+             public
               property Items[const aIndex:longint]:TNode read GetItem; default;
+             published
               property Count:longint read fCount;
             end;
 
@@ -615,13 +618,13 @@ begin
   end;
   if (c shr 24)<3 then begin
    inc(l);
-   result[l]:=chr((c shr 16) and $ff);
+   result[l]:=AnsiChar(Byte((c shr 16) and $ff));
    if (c shr 24)<2 then begin
     inc(l);
-    result[l]:=chr((c shr 8) and $ff);
+    result[l]:=AnsiChar(Byte((c shr 8) and $ff));
     if (c shr 24)<1 then begin
      inc(l);
-     result[l]:=chr(c and $ff);
+     result[l]:=AnsiChar(Byte(c and $ff));
     end;
    end;
   end else begin
@@ -691,7 +694,7 @@ begin
   end;
   p:=pos('=',s);
   while p>0 do begin
-   encode:=chr((pos(s[p+1],hexa) shl 4) or pos(s[p+2],hexa));
+   encode:=AnsiChar(Byte((pos(s[p+1],hexa) shl 4) or pos(s[p+2],hexa)));
    if encode=#0 then begin
     encode:=#13#10;
    end;
@@ -1281,13 +1284,13 @@ begin
  j:=1;
  for i:=0 to length(Buffer)-1 do begin
   v:=Buffer[i];
-  result[j]:=chr((v shr 24) and $ff);
+  result[j]:=AnsiChar(Byte((v shr 24) and $ff));
   inc(j);
-  result[j]:=chr((v shr 16) and $ff);
+  result[j]:=AnsiChar(Byte((v shr 16) and $ff));
   inc(j);
-  result[j]:=chr((v shr 8) and $ff);
+  result[j]:=AnsiChar(Byte((v shr 8) and $ff));
   inc(j);
-  result[j]:=chr(v and $ff);
+  result[j]:=AnsiChar(Byte(v and $ff));
   inc(j);
  end;
  setlength(Buffer,0);
@@ -1342,37 +1345,37 @@ begin
  for i:=0 to length(s)-1 do begin
   u4c:=s[i];
   if u4c<=$7f then begin
-   result[j]:=chr(u4c);
+   result[j]:=AnsiChar(Byte(u4c));
    inc(j);
   end else if u4c<=$7ff then begin
-   result[j]:=chr($c0 or (u4c shr 6));
-   result[j+1]:=chr($80 or (u4c and $3f));
+   result[j]:=AnsiChar(Byte($c0 or (u4c shr 6)));
+   result[j+1]:=AnsiChar(Byte($80 or (u4c and $3f)));
    inc(j,2);
   end else if u4c<=$ffff then begin
-   result[j]:=chr($e0 or (u4c shr 12));
-   result[j+1]:=chr($80 or ((u4c shr 6) and $3f));
-   result[j+2]:=chr($80 or (u4c and $3f));
+   result[j]:=AnsiChar(Byte($e0 or (u4c shr 12)));
+   result[j+1]:=AnsiChar(Byte($80 or ((u4c shr 6) and $3f)));
+   result[j+2]:=AnsiChar(Byte($80 or (u4c and $3f)));
    inc(j,3);
   end else if u4c<=$1fffff then begin
-   result[j]:=chr($f0 or (u4c shr 18));
-   result[j+1]:=chr($80 or ((u4c shr 12) and $3f));
-   result[j+2]:=chr($80 or ((u4c shr 6) and $3f));
-   result[j+3]:=chr($80 or (u4c and $3f));
+   result[j]:=AnsiChar(Byte($f0 or (u4c shr 18)));
+   result[j+1]:=AnsiChar(Byte($80 or ((u4c shr 12) and $3f)));
+   result[j+2]:=AnsiChar(Byte($80 or ((u4c shr 6) and $3f)));
+   result[j+3]:=AnsiChar(Byte($80 or (u4c and $3f)));
    inc(j,4);
   end else if u4c<=$3ffffff then begin
-   result[j]:=chr($f8 or (u4c shr 24));
-   result[j+1]:=chr($80 or ((u4c shr 18) and $3f));
-   result[j+2]:=chr($80 or ((u4c shr 12) and $3f));
-   result[j+3]:=chr($80 or ((u4c shr 6) and $3f));
-   result[j+4]:=chr($80 or (u4c and $3f));
+   result[j]:=AnsiChar(Byte($f8 or (u4c shr 24)));
+   result[j+1]:=AnsiChar(Byte($80 or ((u4c shr 18) and $3f)));
+   result[j+2]:=AnsiChar(Byte($80 or ((u4c shr 12) and $3f)));
+   result[j+3]:=AnsiChar(Byte($80 or ((u4c shr 6) and $3f)));
+   result[j+4]:=AnsiChar(Byte($80 or (u4c and $3f)));
    inc(j,5);
   end else if u4c<=$7fffffff then begin
-   result[j]:=chr($fc or (u4c shr 30));
-   result[j+1]:=chr($80 or ((u4c shr 24) and $3f));
-   result[j+2]:=chr($80 or ((u4c shr 18) and $3f));
-   result[j+3]:=chr($80 or ((u4c shr 12) and $3f));
-   result[j+4]:=chr($80 or ((u4c shr 6) and $3f));
-   result[j+5]:=chr($80 or (u4c and $3f));
+   result[j]:=AnsiChar(Byte($fc or (u4c shr 30)));
+   result[j+1]:=AnsiChar(Byte($80 or ((u4c shr 24) and $3f)));
+   result[j+2]:=AnsiChar(Byte($80 or ((u4c shr 18) and $3f)));
+   result[j+3]:=AnsiChar(Byte($80 or ((u4c shr 12) and $3f)));
+   result[j+4]:=AnsiChar(Byte($80 or ((u4c shr 6) and $3f)));
+   result[j+5]:=AnsiChar(Byte($80 or (u4c and $3f)));
    inc(j,6);
   end;
  end;
@@ -1508,8 +1511,8 @@ begin
      c1:=Value[i];
      if c1>#127 then begin
       Unicode:=SourceTable[byte(c1)];
-      c1:=chr(Unicode and $ff);
-      c2:=chr(Unicode shr 8);
+      c1:=AnsiChar(Byte(Unicode and $ff));
+      c2:=AnsiChar(Byte(Unicode shr 8));
      end;
      inc(i);
     end;
@@ -1571,10 +1574,10 @@ begin
        break;
       end;
      end;
-     c1:=chr(b);
+     c1:=AnsiChar(Byte(b));
      c2:=#0;
     end else begin
-     c1:=chr(Unicode and $ff);
+     c1:=AnsiChar(Byte(Unicode and $ff));
     end;
    end;
    case ToByteCount of
@@ -7143,13 +7146,12 @@ begin
           end;
          end;
         end;
-       end else begin
-        // Handle standalone ! or [ that doesn't form a valid link/image pattern
-        NewMarkDownBlock(aParentMarkDownBlock,TMarkdown.TNodeType.Text,aInputText[EndPosition],0);
-        inc(EndPosition);
-        InputPosition:=EndPosition;
-        continue;
        end;
+       // Handle standalone ! or [ that doesn't form a valid link/image pattern
+       NewMarkDownBlock(aParentMarkDownBlock,TMarkdown.TNodeType.Text,aInputText[EndPosition],0);
+       inc(EndPosition);
+       InputPosition:=EndPosition;
+       continue;
       end;
 
       // Langle Tag
@@ -7294,6 +7296,11 @@ begin
          end;
         end;
        end;
+       // Handle standalone < that doesn't form a valid langle tag pattern
+       NewMarkDownBlock(aParentMarkDownBlock,TMarkdown.TNodeType.Text,aInputText[EndPosition],0);
+       inc(EndPosition);
+       InputPosition:=EndPosition;
+       continue;
       end;
 
       // Escape
