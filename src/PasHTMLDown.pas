@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                PasHTMLDown Libary                          *
  ******************************************************************************
- *                        Version 2025-08-30-18-56-0000                       *
+ *                        Version 2025-10-17-00-33-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -5204,9 +5204,12 @@ const tcaNone=0;
       tcaRight=2;
       tcaCenter=3;
       tfHeader=4;
-var Index:longint;
+var Index,InputPosition:longint;
     CurrentMarkDownBlock:TNode;
     ChildNode:THTML.TNode;
+    RawHTML,TagName,ParameterName,ParameterValue:RawByteString;
+    CurrentChar,QuoteChar:ansichar;
+    IsCloseTag{,IsAloneTag}:boolean;
 begin
  case aCurrentMarkDownBlock.BlockType of
   TMarkdown.TNodeType.Root:begin
@@ -5225,7 +5228,159 @@ begin
    exit;
   end;
   TMarkdown.TNodeType.HTMLTag:begin
-   result:=THTML.TNode.Create(THTML.TNodeType.Text,'',aCurrentMarkDownBlock.StringData);
+   RawHTML:=aCurrentMarkDownBlock.StringData;
+   // Parse HTML tag from RawHTML string
+   if length(RawHTML)>0 then begin
+    InputPosition:=1;
+    // Skip leading '<'
+    if (InputPosition<=length(RawHTML)) and (RawHTML[InputPosition]='<') then begin
+     inc(InputPosition);
+    end;
+    // Check for close tag
+    if (InputPosition<=length(RawHTML)) and (RawHTML[InputPosition]='/') then begin
+     IsCloseTag:=true;
+     inc(InputPosition);
+    end else begin
+     IsCloseTag:=false;
+    end;
+    // Parse tag name
+    TagName:='';
+    while InputPosition<=length(RawHTML) do begin
+     CurrentChar:=RawHTML[InputPosition];
+     case CurrentChar of
+      'a'..'z','A'..'Z','0'..'9','-':begin
+       TagName:=TagName+upcase(CurrentChar);
+       inc(InputPosition);
+      end;
+      else begin
+       break;
+      end;
+     end;
+    end;
+    if IsCloseTag then begin
+     // For close tags, just return nil or empty text node
+     result:=nil;
+     exit;
+    end;
+    // Create tag node
+    result:=THTML.TNode.Create(THTML.TNodeType.Tag,TagName);
+    // Parse parameters/attributes
+    //IsAloneTag:=false;
+    while InputPosition<=length(RawHTML) do begin
+     // Skip whitespace
+     while (InputPosition<=length(RawHTML)) and (RawHTML[InputPosition] in [#0..#32]) do begin
+      inc(InputPosition);
+     end;
+     if InputPosition<=length(RawHTML) then begin
+      CurrentChar:=RawHTML[InputPosition];
+      case CurrentChar of
+       '/':begin
+        //IsAloneTag:=true;
+        inc(InputPosition);
+       end;
+       '>':begin
+        inc(InputPosition);
+        break;
+       end;
+       'a'..'z','A'..'Z','0'..'9','-':begin
+        ParameterName:='';
+        ParameterValue:='';
+        // Parse parameter name
+        while InputPosition<=length(RawHTML) do begin
+         CurrentChar:=RawHTML[InputPosition];
+         case CurrentChar of
+          'a'..'z','A'..'Z','0'..'9','-':begin
+           ParameterName:=ParameterName+upcase(CurrentChar);
+           inc(InputPosition);
+          end;
+          else begin
+           break;
+          end;
+         end;
+        end;
+        // Skip whitespace
+        while (InputPosition<=length(RawHTML)) and (RawHTML[InputPosition] in [#0..#32]) do begin
+         inc(InputPosition);
+        end;
+        // Check for '='
+        if (InputPosition<=length(RawHTML)) and (RawHTML[InputPosition]='=') then begin
+         inc(InputPosition);
+         // Skip whitespace
+         while (InputPosition<=length(RawHTML)) and (RawHTML[InputPosition] in [#0..#32]) do begin
+          inc(InputPosition);
+         end;
+         // Parse parameter value
+         if (InputPosition<=length(RawHTML)) and (RawHTML[InputPosition] in ['''','"']) then begin
+          QuoteChar:=RawHTML[InputPosition];
+          inc(InputPosition);
+          while InputPosition<=length(RawHTML) do begin
+           CurrentChar:=RawHTML[InputPosition];
+           if CurrentChar=QuoteChar then begin
+            inc(InputPosition);
+            break;
+           end else if CurrentChar='\' then begin
+            inc(InputPosition);
+            if InputPosition<=length(RawHTML) then begin
+             CurrentChar:=RawHTML[InputPosition];
+             inc(InputPosition);
+             case CurrentChar of
+              '''','"':begin
+               ParameterValue:=ParameterValue+CurrentChar;
+              end;
+              'r','R':begin
+               ParameterValue:=ParameterValue+#13;
+              end;
+              'n','N':begin
+               ParameterValue:=ParameterValue+#10;
+              end;
+              't','T':begin
+               ParameterValue:=ParameterValue+#9;
+              end;
+              'b','B':begin
+               ParameterValue:=ParameterValue+#8;
+              end;
+              else begin
+               ParameterValue:=ParameterValue+'\'+CurrentChar;
+              end;
+             end;
+            end;
+           end else begin
+            ParameterValue:=ParameterValue+CurrentChar;
+            inc(InputPosition);
+           end;
+          end;
+         end else begin
+          // Unquoted value
+          while InputPosition<=length(RawHTML) do begin
+           CurrentChar:=RawHTML[InputPosition];
+           case CurrentChar of
+            #0..#32,'>':begin
+             break;
+            end;
+            else begin
+             ParameterValue:=ParameterValue+CurrentChar;
+             inc(InputPosition);
+            end;
+           end;
+          end;
+         end;
+        end;
+        // Add parameter if name is not empty
+        if length(ParameterName)>0 then begin
+         result.AddTagParameter(ParameterName,ParameterValue);
+        end;
+       end;
+       else begin
+        inc(InputPosition);
+       end;
+      end;
+     end else begin
+      break;
+     end;
+    end;
+   end else begin
+    result:=THTML.TNode.Create(THTML.TNodeType.Text,'',EscapeHTML(aCurrentMarkDownBlock.StringData));
+   end;
    exit;
   end;
   TMarkdown.TNodeType.WebLink:begin
