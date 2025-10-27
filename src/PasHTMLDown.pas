@@ -415,6 +415,8 @@ type
               fTagName:RawByteString;
               fText:RawByteString;
               fTagParameters:TTagParameterList;
+              fRaw:Boolean;
+              fClosing:Boolean;
              public
               constructor Create(const aNodeType:TNodeType;const aTagName:RawByteString='';const aText:RawByteString='');
               destructor Destroy; override;
@@ -426,6 +428,8 @@ type
               property TagName:RawByteString read fTagName write fTagName;
               property Text:RawByteString read fText write fText;
               property TagParameters:TTagParameterList read fTagParameters;
+              property Raw:Boolean read fRaw write fRaw;
+              property Closing:Boolean read fClosing write fClosing;
             end;
 
       private
@@ -2865,6 +2869,8 @@ begin
  fTagName:=aTagName;
  fText:=aText;
  fTagParameters:=TTagParameterList.Create;
+ fRaw:=false;
+ fClosing:=false;
 end;
 
 destructor THTML.TNode.Destroy;
@@ -2892,7 +2898,6 @@ begin
  TagParameter:=TTagParameter.Create(aName,aValue);
  fTagParameters.Add(TagParameter);
 end;
-
 
 constructor THTML.Create(aInput:RawByteString;aCharset:TCharset);
 type TParameter=record
@@ -4565,20 +4570,28 @@ function THTML.GetHTML(aAllowedTags:TStringList=nil):RawByteString;
      if aNode.TagName='PRE' then begin
       aPreserveWhiteSpace:=true;
      end;
-     result:='<'+LowerCase(aNode.TagName);
-     for i:=0 to aNode.TagParameters.Count-1 do begin
-      result:=result+' '+LowerCase(aNode.TagParameters[i].Name)+'="'+ConvertToEntities(aNode.TagParameters[i].Value,0,false)+'"';
-     end;
-     if (aNode.Children.Count>0) or not ((aNode.TagName='BR') or (aNode.TagName='HR')) then begin
-      result:=result+'>';
-      for i:=0 to aNode.Children.Count-1 do begin
-       result:=result+Build(aNode.Children[i],aPreserveWhiteSpace);
-      end;
-      result:=result+'</'+LowerCase(aNode.TagName)+'>';
+     if aNode.fClosing then begin
+      result:='</'+LowerCase(aNode.TagName);
      end else begin
-      result:=result+'/>';
-      if aNode.TagName='BR' then begin
-       result:=result+#10;
+      result:='<'+LowerCase(aNode.TagName);
+      for i:=0 to aNode.TagParameters.Count-1 do begin
+       result:=result+' '+LowerCase(aNode.TagParameters[i].Name)+'="'+ConvertToEntities(aNode.TagParameters[i].Value,0,false)+'"';
+      end;
+     end;
+     if aNode.fRaw then begin
+      result:=result+'>';
+     end else begin
+      if (aNode.Children.Count>0) or not ((aNode.TagName='BR') or (aNode.TagName='HR')) then begin
+       result:=result+'>';
+       for i:=0 to aNode.Children.Count-1 do begin
+        result:=result+Build(aNode.Children[i],aPreserveWhiteSpace);
+       end;
+       result:=result+'</'+LowerCase(aNode.TagName)+'>';
+      end else begin
+       result:=result+'/>';
+       if aNode.TagName='BR' then begin
+        result:=result+#10;
+       end;
       end;
      end;
     end;
@@ -4688,8 +4701,272 @@ begin
 end;
 
 function TMarkdown.GetHTML:THTML;
+const NestableTags:array[0..10] of RawByteString=('think','mark','strong','b','em','i','u','del','sup','sub','code');
+
+ function IsNestableTag(const aTagName:RawByteString):boolean;
+ var TagIndex:longint;
+ begin
+  result:=false;
+  for TagIndex:=Low(NestableTags) to High(NestableTags) do begin
+   if LowerCase(aTagName)=NestableTags[TagIndex] then begin
+    result:=true;
+    exit;
+   end;
+  end;
+ end;
+
+ function HasNestableTags(const aNode:THTML.TNode):boolean;
+ var ChildIndex:longint;
+     TagName:RawByteString;
+     IsClosingTag:boolean;
+     Stack:array of RawByteString;
+     StackCount:longint;
+     StackIndex:longint;
+     Node:THTML.TNode;
+ begin
+
+  result:=false;
+
+  if assigned(aNode) and assigned(aNode.Children) and (aNode.Children.Count>0) then begin
+
+   Stack:=nil;
+   try
+
+    StackCount:=0;
+
+    for ChildIndex:=0 to aNode.Children.Count-1 do begin
+     Node:=aNode.Children[ChildIndex];
+     if (Node.NodeType=THTML.TNodeType.Tag) and Node.fRaw then begin
+      TagName:=LowerCase(Node.TagName);
+      IsClosingTag:=Node.fClosing or ((length(TagName)>0) and (TagName[1]='/'));
+
+      if IsClosingTag then begin
+
+       if not Node.fClosing then begin
+        // Remove the leading / to get the actual tag name
+        TagName:=Copy(TagName,2,length(TagName)-1);
+       end;
+
+       // Try to find matching opening tag in stack
+       StackIndex:=StackCount;
+       while StackIndex>0 do begin
+        dec(StackIndex);
+        if Stack[StackIndex]=TagName then begin
+         // Found matching opening tag - we have nestable tags
+         result:=true;
+         break;
+        end;
+       end;
+      end else begin
+       // Check if it's a forced nestable tag
+       if IsNestableTag(TagName) then begin
+        result:=true;
+        break;
+       end else begin
+        // Opening tag - push to stack
+        StackIndex:=StackCount;
+        inc(StackCount);
+        if length(Stack)<StackCount then begin
+         SetLength(Stack,StackCount+((StackCount+1) shr 1));
+        end;
+        Stack[StackIndex]:=TagName;
+       end;
+      end;
+     end;
+
+     // Recursively check children
+     if HasNestableTags(aNode.Children[ChildIndex]) then begin
+      result:=true;
+      break;
+     end;
+
+    end;
+
+   finally
+    Stack:=nil;
+   end;
+
+  end;
+ end;
+
+ procedure Restructure(var aRootNode:THTML.TNode);
+ type TStackEntry=record
+       Node:THTML.TNode;
+       TagName:RawByteString;
+      end;
+ var Stack:array of TStackEntry;
+     StackCount:longint;
+     CurrentParent:THTML.TNode;
+     
+  procedure ProcessNode(const aNode:THTML.TNode);
+  var ChildIndex,ScanIndex,StackIndex:longint;
+      CurrentChild:THTML.TNode;
+      OriginalChildren:array of THTML.TNode;
+      OriginalCount:longint;
+      TagName,ScanTagName:RawByteString;
+      IsClosingTag,HasClosingTag:boolean;
+  begin
+
+   if assigned(aNode) and assigned(aNode.Children) and (aNode.Children.Count>0) then begin
+
+    OriginalCount:=aNode.Children.Count;
+    
+    SetLength(OriginalChildren,OriginalCount);
+    for ChildIndex:=0 to OriginalCount-1 do begin
+     OriginalChildren[ChildIndex]:=aNode.Children.fItems[ChildIndex];
+    end;
+    
+    aNode.Children.fCount:=0;
+    
+    for ChildIndex:=0 to OriginalCount-1 do begin
+     CurrentChild:=OriginalChildren[ChildIndex];
+     
+     if (CurrentChild.NodeType=THTML.TNodeType.Tag) and CurrentChild.fRaw then begin
+      TagName:=LowerCase(CurrentChild.TagName);
+      IsClosingTag:=CurrentChild.fClosing or ((length(TagName)>0) and (TagName[1]='/'));
+      
+      if IsClosingTag then begin
+
+       // Remove leading / if present
+       if (length(TagName)>0) and (TagName[1]='/') then begin
+        TagName:=Copy(TagName,2,length(TagName)-1);
+       end;
+       
+       // Pop from stack until we find matching opening tag
+       StackIndex:=StackCount;
+       while StackIndex>0 do begin
+        dec(StackIndex);
+        if Stack[StackIndex].TagName=TagName then begin
+         CurrentParent:=Stack[StackIndex].Node.Parent;
+         if not assigned(CurrentParent) then begin
+          CurrentParent:=aRootNode;
+         end;
+         StackCount:=StackIndex;
+         SetLength(Stack,StackCount);
+         break;
+        end;
+       end;
+
+       // Closing tag node itself is not added to the tree
+
+      end else begin
+
+       // Opening tag - check if we should nest it
+       HasClosingTag:=IsNestableTag(TagName);
+       
+       // If not a forced nestable tag, scan ahead for matching closing tag
+       if not HasClosingTag then begin
+
+        ScanIndex:=ChildIndex+1;
+
+        StackIndex:=1; // Start with 1 for current opening tag
+        while (ScanIndex<OriginalCount) and (StackIndex>0) do begin
+
+         if (OriginalChildren[ScanIndex].NodeType=THTML.TNodeType.Tag) and OriginalChildren[ScanIndex].fRaw then begin
+
+          ScanTagName:=LowerCase(OriginalChildren[ScanIndex].TagName);
+
+          if OriginalChildren[ScanIndex].fClosing or ((length(ScanTagName)>0) and (ScanTagName[1]='/')) then begin
+
+           // Closing tag
+           if (length(ScanTagName)>0) and (ScanTagName[1]='/') then begin
+            ScanTagName:=Copy(ScanTagName,2,length(ScanTagName)-1);
+           end;
+
+           if ScanTagName=TagName then begin
+
+            dec(StackIndex);
+
+            if StackIndex=0 then begin
+             HasClosingTag:=true;
+             break;
+            end;
+
+           end;
+
+          end else begin
+
+           // Opening tag, check if it's the same tag (nested)
+           if ScanTagName=TagName then begin
+            inc(StackIndex);
+           end;
+
+          end;
+
+         end;
+
+         inc(ScanIndex);
+
+        end;
+
+       end;
+       
+       // Add the node to current parent
+       CurrentParent.AddChild(CurrentChild);
+       
+       // Only push to stack and nest if it has a closing tag
+       if HasClosingTag then begin
+        inc(StackCount);
+        SetLength(Stack,StackCount);
+        Stack[StackCount-1].Node:=CurrentChild;
+        Stack[StackCount-1].TagName:=TagName;
+        CurrentParent:=CurrentChild;
+       end;
+       
+       // Recursively process children of this tag node
+       ProcessNode(CurrentChild);
+
+      end;
+
+     end else begin
+
+      // Not a raw tag node, just add to current parent
+      CurrentParent.AddChild(CurrentChild);
+
+      // Recursively process children of this node
+      ProcessNode(CurrentChild);
+
+     end;
+
+    end;
+   
+    OriginalChildren:=nil;
+
+   end;
+
+  end;
+  
+ begin
+
+  if assigned(aRootNode) then begin
+
+   Stack:=nil;
+   try
+
+    StackCount:=0;
+
+    CurrentParent:=aRootNode;
+
+    ProcessNode(aRootNode);
+
+   finally
+    Stack:=nil;
+   end;
+
+  end;
+ end;
+
+var HTMLRootNode:THTML.TNode;
+//  HTMLText:RawByteString;
 begin
- result:=THTML.Create(ProcessMarkDownBlockHTMLNode(fRootNode));
+ HTMLRootNode:=ProcessMarkDownBlockHTMLNode(fRootNode);
+ result:=THTML.Create(HTMLRootNode);
+ if HasNestableTags(HTMLRootNode) then begin
+{ HTMLText:=result.GetHTML;
+  FreeAndNil(result);
+  result:=THTML.Create(HTMLText);}
+  Restructure(result.fRootNode);
+ end;
 end;
 
 function TMarkdown.NewMarkDownBlock(const aParent:TNode;const aBlockType:TNodeType;const aStringData:RawByteString;const aTag:longint):TNode;
@@ -5257,125 +5534,129 @@ begin
       end;
      end;
     end;
-    if IsCloseTag then begin
+{   if IsCloseTag then begin
      // For close tags, just return nil or empty text node
      result:=nil;
      exit;
-    end;
+    end;}
     // Create tag node
     result:=THTML.TNode.Create(THTML.TNodeType.Tag,TagName);
-    // Parse parameters/attributes
-    //IsAloneTag:=false;
-    while InputPosition<=length(RawHTML) do begin
-     // Skip whitespace
-     while (InputPosition<=length(RawHTML)) and (RawHTML[InputPosition] in [#0..#32]) do begin
-      inc(InputPosition);
-     end;
-     if InputPosition<=length(RawHTML) then begin
-      CurrentChar:=RawHTML[InputPosition];
-      case CurrentChar of
-       '/':begin
-        //IsAloneTag:=true;
-        inc(InputPosition);
-       end;
-       '>':begin
-        inc(InputPosition);
-        break;
-       end;
-       'a'..'z','A'..'Z','0'..'9','-':begin
-        ParameterName:='';
-        ParameterValue:='';
-        // Parse parameter name
-        while InputPosition<=length(RawHTML) do begin
-         CurrentChar:=RawHTML[InputPosition];
-         case CurrentChar of
-          'a'..'z','A'..'Z','0'..'9','-':begin
-           ParameterName:=ParameterName+upcase(CurrentChar);
-           inc(InputPosition);
-          end;
-          else begin
-           break;
+    result.fRaw:=true;
+    result.fClosing:=IsCloseTag;
+    if not IsCloseTag then begin
+     // Parse parameters/attributes
+     //IsAloneTag:=false;
+     while InputPosition<=length(RawHTML) do begin
+      // Skip whitespace
+      while (InputPosition<=length(RawHTML)) and (RawHTML[InputPosition] in [#0..#32]) do begin
+       inc(InputPosition);
+      end;
+      if InputPosition<=length(RawHTML) then begin
+       CurrentChar:=RawHTML[InputPosition];
+       case CurrentChar of
+        '/':begin
+         //IsAloneTag:=true;
+         inc(InputPosition);
+        end;
+        '>':begin
+         inc(InputPosition);
+         break;
+        end;
+        'a'..'z','A'..'Z','0'..'9','-':begin
+         ParameterName:='';
+         ParameterValue:='';
+         // Parse parameter name
+         while InputPosition<=length(RawHTML) do begin
+          CurrentChar:=RawHTML[InputPosition];
+          case CurrentChar of
+           'a'..'z','A'..'Z','0'..'9','-':begin
+            ParameterName:=ParameterName+upcase(CurrentChar);
+            inc(InputPosition);
+           end;
+           else begin
+            break;
+           end;
           end;
          end;
-        end;
-        // Skip whitespace
-        while (InputPosition<=length(RawHTML)) and (RawHTML[InputPosition] in [#0..#32]) do begin
-         inc(InputPosition);
-        end;
-        // Check for '='
-        if (InputPosition<=length(RawHTML)) and (RawHTML[InputPosition]='=') then begin
-         inc(InputPosition);
          // Skip whitespace
          while (InputPosition<=length(RawHTML)) and (RawHTML[InputPosition] in [#0..#32]) do begin
           inc(InputPosition);
          end;
-         // Parse parameter value
-         if (InputPosition<=length(RawHTML)) and (RawHTML[InputPosition] in ['''','"']) then begin
-          QuoteChar:=RawHTML[InputPosition];
+         // Check for '='
+         if (InputPosition<=length(RawHTML)) and (RawHTML[InputPosition]='=') then begin
           inc(InputPosition);
-          while InputPosition<=length(RawHTML) do begin
-           CurrentChar:=RawHTML[InputPosition];
-           if CurrentChar=QuoteChar then begin
-            inc(InputPosition);
-            break;
-           end else if CurrentChar='\' then begin
-            inc(InputPosition);
-            if InputPosition<=length(RawHTML) then begin
-             CurrentChar:=RawHTML[InputPosition];
+          // Skip whitespace
+          while (InputPosition<=length(RawHTML)) and (RawHTML[InputPosition] in [#0..#32]) do begin
+           inc(InputPosition);
+          end;
+          // Parse parameter value
+          if (InputPosition<=length(RawHTML)) and (RawHTML[InputPosition] in ['''','"']) then begin
+           QuoteChar:=RawHTML[InputPosition];
+           inc(InputPosition);
+           while InputPosition<=length(RawHTML) do begin
+            CurrentChar:=RawHTML[InputPosition];
+            if CurrentChar=QuoteChar then begin
              inc(InputPosition);
-             case CurrentChar of
-              '''','"':begin
-               ParameterValue:=ParameterValue+CurrentChar;
-              end;
-              'r','R':begin
-               ParameterValue:=ParameterValue+#13;
-              end;
-              'n','N':begin
-               ParameterValue:=ParameterValue+#10;
-              end;
-              't','T':begin
-               ParameterValue:=ParameterValue+#9;
-              end;
-              'b','B':begin
-               ParameterValue:=ParameterValue+#8;
-              end;
-              else begin
-               ParameterValue:=ParameterValue+'\'+CurrentChar;
+             break;
+            end else if CurrentChar='\' then begin
+             inc(InputPosition);
+             if InputPosition<=length(RawHTML) then begin
+              CurrentChar:=RawHTML[InputPosition];
+              inc(InputPosition);
+              case CurrentChar of
+               '''','"':begin
+                ParameterValue:=ParameterValue+CurrentChar;
+               end;
+               'r','R':begin
+                ParameterValue:=ParameterValue+#13;
+               end;
+               'n','N':begin
+                ParameterValue:=ParameterValue+#10;
+               end;
+               't','T':begin
+                ParameterValue:=ParameterValue+#9;
+               end;
+               'b','B':begin
+                ParameterValue:=ParameterValue+#8;
+               end;
+               else begin
+                ParameterValue:=ParameterValue+'\'+CurrentChar;
+               end;
               end;
              end;
-            end;
-           end else begin
-            ParameterValue:=ParameterValue+CurrentChar;
-            inc(InputPosition);
-           end;
-          end;
-         end else begin
-          // Unquoted value
-          while InputPosition<=length(RawHTML) do begin
-           CurrentChar:=RawHTML[InputPosition];
-           case CurrentChar of
-            #0..#32,'>':begin
-             break;
-            end;
-            else begin
+            end else begin
              ParameterValue:=ParameterValue+CurrentChar;
              inc(InputPosition);
             end;
            end;
+          end else begin
+           // Unquoted value
+           while InputPosition<=length(RawHTML) do begin
+            CurrentChar:=RawHTML[InputPosition];
+            case CurrentChar of
+             #0..#32,'>':begin
+              break;
+             end;
+             else begin
+              ParameterValue:=ParameterValue+CurrentChar;
+              inc(InputPosition);
+             end;
+            end;
+           end;
           end;
          end;
+         // Add parameter if name is not empty
+         if length(ParameterName)>0 then begin
+          result.AddTagParameter(ParameterName,ParameterValue);
+         end;
         end;
-        // Add parameter if name is not empty
-        if length(ParameterName)>0 then begin
-         result.AddTagParameter(ParameterName,ParameterValue);
+        else begin
+         inc(InputPosition);
         end;
        end;
-       else begin
-        inc(InputPosition);
-       end;
+      end else begin
+       break;
       end;
-     end else begin
-      break;
      end;
     end;
    end else begin

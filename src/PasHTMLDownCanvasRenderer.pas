@@ -521,6 +521,7 @@ type TMarkDownRendererUTF8String={$if declared(UTF8String)}UTF8String{$else}Ansi
               fCode:boolean;
               fBlockQuote:boolean;
               fMark:boolean;
+              fThink:boolean;
              public
               property Kind:TLayoutItemKind read fKind write fKind;
               property X:{$ifdef FMX}TMarkDownRendererFloat{$else}TMarkDownRendererInt32{$endif} read fX write fX;
@@ -537,6 +538,7 @@ type TMarkDownRendererUTF8String={$if declared(UTF8String)}UTF8String{$else}Ansi
               property Code:boolean read fCode write fCode;
               property BlockQuote:boolean read fBlockQuote write fBlockQuote;
               property Mark:boolean read fMark write fMark;
+              property Think:boolean read fThink write fThink;
             end;
 
             TLayoutItemList=class
@@ -698,6 +700,8 @@ type TMarkDownRendererUTF8String={$if declared(UTF8String)}UTF8String{$else}Ansi
        fFontCodeColor:{$ifdef FMX}TAlphaColor{$else}TColor{$endif};
        fBGMarkColor:{$ifdef FMX}TAlphaColor{$else}TColor{$endif};
        fFontMarkColor:{$ifdef FMX}TAlphaColor{$else}TColor{$endif};
+       fBGThinkColor:{$ifdef FMX}TAlphaColor{$else}TColor{$endif};
+       fFontThinkColor:{$ifdef FMX}TAlphaColor{$else}TColor{$endif};
 
        fBGColor:{$ifdef FMX}TAlphaColor{$else}TColor{$endif};
        fFontColor:{$ifdef FMX}TAlphaColor{$else}TColor{$endif};
@@ -709,6 +713,8 @@ type TMarkDownRendererUTF8String={$if declared(UTF8String)}UTF8String{$else}Ansi
        fBaselineShiftCurrent:{$ifdef FMX}TMarkDownRendererFloat{$else}TMarkDownRendererInt32{$endif};
        // current inline mark highlight state
        fMarkActive:boolean;
+       // current inline think state
+       fThinkActive:boolean;
 
 {$ifdef FMX}
        fCurrentFontColor:{$ifdef FMX}TAlphaColor{$else}TColor{$endif};
@@ -771,6 +777,8 @@ type TMarkDownRendererUTF8String={$if declared(UTF8String)}UTF8String{$else}Ansi
        property FontCodeColor:{$ifdef FMX}TAlphaColor{$else}TColor{$endif} read fFontCodeColor write fFontCodeColor;
        property BGMarkColor:{$ifdef FMX}TAlphaColor{$else}TColor{$endif} read fBGMarkColor write fBGMarkColor;
        property FontMarkColor:{$ifdef FMX}TAlphaColor{$else}TColor{$endif} read fFontMarkColor write fFontMarkColor;
+       property BGThinkColor:{$ifdef FMX}TAlphaColor{$else}TColor{$endif} read fBGThinkColor write fBGThinkColor;
+       property FontThinkColor:{$ifdef FMX}TAlphaColor{$else}TColor{$endif} read fFontThinkColor write fFontThinkColor;
 
        property BGColor:{$ifdef FMX}TAlphaColor{$else}TColor{$endif} read fBGColor write fBGColor;
        property FontColor:{$ifdef FMX}TAlphaColor{$else}TColor{$endif} read fFontColor write fFontColor;
@@ -1886,6 +1894,8 @@ begin
  fFontCodeColor:=TColorRec.cINFOTEXT;
  fBGMarkColor:=TColorRec.cHIGHLIGHT;
  fFontMarkColor:=TColorRec.cHIGHLIGHTTEXT;
+ fBGThinkColor:=TColorRec.cWINDOW;
+ fFontThinkColor:=TColorRec.cGRAYTEXT;
 
  fBGColor:=TColorRec.cWINDOW;
  fFontColor:=TColorRec.cWINDOWTEXT;
@@ -1895,6 +1905,8 @@ begin
  fFontCodeColor:=clInfoText;
  fBGMarkColor:=clYellow;
  fFontMarkColor:=clBlack;
+ fBGThinkColor:=clWindow;
+ fFontThinkColor:=clGrayText;
 
  fBGColor:=clWindow;
  fFontColor:=clWindowText;
@@ -1905,6 +1917,7 @@ begin
 
  fBaselineShiftCurrent:=0;
  fMarkActive:=false;
+ fThinkActive:=false;
 
 end;
 
@@ -2201,6 +2214,7 @@ begin
    Item.Code:=aUseCode;
    Item.BlockQuote:=aIsBlockQuote;
    Item.Mark:=fMarkActive;
+   Item.Think:=fThinkActive;
 
    RectX:=Item.X;
    RectY:=Item.Y;
@@ -3392,6 +3406,7 @@ var ChildIndex:TMarkDownRendererInt32;
     PrevUseMono:boolean;
     PrevBaselineShift:{$ifdef FMX}TMarkDownRendererFloat{$else}TMarkDownRendererInt32{$endif};
     PrevMark:boolean;
+    PrevThink:boolean;
     PreviousLineX:{$ifdef FMX}TMarkDownRendererFloat{$else}TMarkDownRendererInt32{$endif};
     PreviousIndent:{$ifdef FMX}TMarkDownRendererFloat{$else}TMarkDownRendererInt32{$endif};
  procedure Push;
@@ -3402,6 +3417,7 @@ var ChildIndex:TMarkDownRendererInt32;
   PrevUseMono:=aUseMono;
   PrevBaselineShift:=fBaselineShiftCurrent;
   PrevMark:=fMarkActive;
+  PrevThink:=fThinkActive;
  end;
  procedure Pop;
  begin
@@ -3411,6 +3427,7 @@ var ChildIndex:TMarkDownRendererInt32;
   aUseMono:=PrevUseMono;
   fBaselineShiftCurrent:=PrevBaselineShift;
   fMarkActive:=PrevMark;
+  fThinkActive:=PrevThink;
  end;
 begin
  if not assigned(aNode) then begin
@@ -3572,6 +3589,15 @@ begin
 {$endif}
   end else if TagUpper='MARK' then begin
    fMarkActive:=true;
+  end else if TagUpper='THINK' then begin
+   fThinkActive:=true;
+{$ifdef FMX}
+   Include(aFontStyle,TFontStyle.fsItalic);
+   aFontSize:=Max(1,aFontSize*0.9);
+{$else}
+   Include(aFontStyle,fsItalic);
+   aFontSize:=Max(1,(aFontSize*9) div 10);
+{$endif}
   end else if TagUpper='SUP' then begin
    // superscript - smaller font and baseline up
 {$ifdef FMX}
@@ -3655,7 +3681,7 @@ begin
 //HtmlDoc:=THTML.Create(MarkDownToHTML(aMarkDownOrHTML),THTML.TCharset.UTF_8);
   MarkDown:=TMarkdown.Create(aMarkDownOrHTML);
   try
-   fHTMLDoc:=MarkDown.GetHTML;
+   fHTMLDoc:=MarkDown.GetHTML;   
   finally
    FreeAndNil(MarkDown);
   end;
@@ -3772,6 +3798,10 @@ begin
      aCanvas.Fill.Color:=fBGMarkColor;
      aCanvas.FillRect(r,1.0);
      aCanvas.Fill.Color:=fFontMarkColor;
+    end else if Item.Think then begin
+     aCanvas.Fill.Color:=fBGThinkColor;
+     aCanvas.FillRect(r,1.0);
+     aCanvas.Fill.Color:=fFontThinkColor;
     end else begin
 //   aCanvas.Fill.Color:=fBGColor;
      aCanvas.Fill.Color:=fFontColor;
@@ -3785,12 +3815,15 @@ begin
     end else if Item.Mark then begin
      aCanvas.Brush.Color:=fBGMarkColor;
      aCanvas.Pen.Color:=fFontMarkColor;
+    end else if Item.Think then begin
+     aCanvas.Brush.Color:=fBGThinkColor;
+     aCanvas.Pen.Color:=fFontThinkColor;
     end else begin
      aCanvas.Brush.Color:=fBGColor;
      aCanvas.Pen.Color:=fFontColor;
     end;
-    // background for mark highlight
-    if Item.Mark then begin
+    // background for mark/think highlight
+    if Item.Mark or Item.Think then begin
      aCanvas.Brush.Style:=bsSolid;
      aCanvas.Pen.Style:=psClear;
      aCanvas.Rectangle(aLeftPosition+Item.X,
@@ -3804,6 +3837,8 @@ begin
     ApplyFont(aCanvas,Item.FontSize,Item.FontStyle,Item.Mono,Item.Code,Item.BlockQuote);
     if Item.Mark then begin
      aCanvas.Font.Color:=fFontMarkColor;
+    end else if Item.Think then begin
+     aCanvas.Font.Color:=fFontThinkColor;
     end;
 {$ifdef fpc}
     aCanvas.TextOut(aLeftPosition+Item.X,aTopPosition+Item.Y,Item.Text);
