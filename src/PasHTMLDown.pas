@@ -4701,7 +4701,22 @@ begin
 end;
 
 function TMarkdown.GetHTML:THTML;
-const NestableTags:array[0..10] of RawByteString=('think','mark','strong','b','em','i','u','del','sup','sub','code');
+const NestableTags:array[0..12] of RawByteString=
+       (
+        'think',
+        'mark',
+        'strong',
+        'b',
+        'em',
+        'i',
+        'u',
+        'del',
+        'sup',
+        'sub',
+        'pre',
+        'p',
+        'code'
+       );
 
  function IsNestableTag(const aTagName:RawByteString):boolean;
  var TagIndex:longint;
@@ -4790,170 +4805,266 @@ const NestableTags:array[0..10] of RawByteString=('think','mark','strong','b','e
  end;
 
  procedure Restructure(var aRootNode:THTML.TNode);
- type TStackEntry=record
+ type TFlatNode=record
        Node:THTML.TNode;
+       IsClosing:boolean;
        TagName:RawByteString;
       end;
- var Stack:array of TStackEntry;
-     StackCount:longint;
-     CurrentParent:THTML.TNode;
-     
-  procedure ProcessNode(const aNode:THTML.TNode);
-  var ChildIndex,ScanIndex,StackIndex:longint;
-      CurrentChild:THTML.TNode;
+ var FlatList:array of TFlatNode;
+     FlatCount:longint;
+
+  procedure FlattenNode(const aNode:THTML.TNode);
+  var ChildIndex:longint;
+      TagName:RawByteString;
+      FlatIndex:longint;
       OriginalChildren:array of THTML.TNode;
-      OriginalCount:longint;
-      TagName,ScanTagName:RawByteString;
-      IsClosingTag,HasClosingTag:boolean;
+      OriginalChildCount:longint;
   begin
+   if assigned(aNode) and assigned(aNode.Children) then begin
 
-   if assigned(aNode) and assigned(aNode.Children) and (aNode.Children.Count>0) then begin
-
-    OriginalCount:=aNode.Children.Count;
-    
-    SetLength(OriginalChildren,OriginalCount);
-    for ChildIndex:=0 to OriginalCount-1 do begin
+    // Store original children
+    OriginalChildCount:=aNode.Children.Count;
+    SetLength(OriginalChildren,OriginalChildCount);
+    for ChildIndex:=0 to OriginalChildCount-1 do begin
      OriginalChildren[ChildIndex]:=aNode.Children.fItems[ChildIndex];
     end;
-    
     aNode.Children.fCount:=0;
-    
-    for ChildIndex:=0 to OriginalCount-1 do begin
-     CurrentChild:=OriginalChildren[ChildIndex];
-     
-     if (CurrentChild.NodeType=THTML.TNodeType.Tag) and CurrentChild.fRaw then begin
-      TagName:=LowerCase(CurrentChild.TagName);
-      IsClosingTag:=CurrentChild.fClosing or ((length(TagName)>0) and (TagName[1]='/'));
+   
+    for ChildIndex:=0 to OriginalChildCount-1 do begin
+
+     if OriginalChildren[ChildIndex].NodeType=THTML.TNodeType.Tag then begin
+
+      TagName:=LowerCase(OriginalChildren[ChildIndex].TagName);
+
+      // Add opening tag
+      FlatIndex:=FlatCount;
+      inc(FlatCount);
+      if length(FlatList)<FlatCount then begin
+       SetLength(FlatList,FlatCount*2);
+      end;
+      FlatList[FlatIndex].Node:=OriginalChildren[ChildIndex];
+      FlatList[FlatIndex].IsClosing:=false;
+      FlatList[FlatIndex].TagName:=TagName;
       
-      if IsClosingTag then begin
+      // Recursively flatten children
+      FlattenNode(OriginalChildren[ChildIndex]);
+      
+      // Add closing tag for non-raw tags
+      if not OriginalChildren[ChildIndex].fRaw then begin
 
-       // Remove leading / if present
-       if (length(TagName)>0) and (TagName[1]='/') then begin
-        TagName:=Copy(TagName,2,length(TagName)-1);
-       end;
+       FlatIndex:=FlatCount;
+       inc(FlatCount);
        
-       // Pop from stack until we find matching opening tag
-       StackIndex:=StackCount;
-       while StackIndex>0 do begin
-        dec(StackIndex);
-        if Stack[StackIndex].TagName=TagName then begin
-         CurrentParent:=Stack[StackIndex].Node.Parent;
-         if not assigned(CurrentParent) then begin
-          CurrentParent:=aRootNode;
-         end;
-         StackCount:=StackIndex;
-         SetLength(Stack,StackCount);
-         break;
-        end;
+       if length(FlatList)<FlatCount then begin
+        SetLength(FlatList,FlatCount*2);
        end;
 
-       // Closing tag node itself is not added to the tree
-
-      end else begin
-
-       // Opening tag - check if we should nest it
-       HasClosingTag:=IsNestableTag(TagName);
-       
-       // If not a forced nestable tag, scan ahead for matching closing tag
-       if not HasClosingTag then begin
-
-        ScanIndex:=ChildIndex+1;
-
-        StackIndex:=1; // Start with 1 for current opening tag
-        while (ScanIndex<OriginalCount) and (StackIndex>0) do begin
-
-         if (OriginalChildren[ScanIndex].NodeType=THTML.TNodeType.Tag) and OriginalChildren[ScanIndex].fRaw then begin
-
-          ScanTagName:=LowerCase(OriginalChildren[ScanIndex].TagName);
-
-          if OriginalChildren[ScanIndex].fClosing or ((length(ScanTagName)>0) and (ScanTagName[1]='/')) then begin
-
-           // Closing tag
-           if (length(ScanTagName)>0) and (ScanTagName[1]='/') then begin
-            ScanTagName:=Copy(ScanTagName,2,length(ScanTagName)-1);
-           end;
-
-           if ScanTagName=TagName then begin
-
-            dec(StackIndex);
-
-            if StackIndex=0 then begin
-             HasClosingTag:=true;
-             break;
-            end;
-
-           end;
-
-          end else begin
-
-           // Opening tag, check if it's the same tag (nested)
-           if ScanTagName=TagName then begin
-            inc(StackIndex);
-           end;
-
-          end;
-
-         end;
-
-         inc(ScanIndex);
-
-        end;
-
-       end;
-       
-       // Add the node to current parent
-       CurrentParent.AddChild(CurrentChild);
-       
-       // Only push to stack and nest if it has a closing tag
-       if HasClosingTag then begin
-        inc(StackCount);
-        SetLength(Stack,StackCount);
-        Stack[StackCount-1].Node:=CurrentChild;
-        Stack[StackCount-1].TagName:=TagName;
-        CurrentParent:=CurrentChild;
-       end;
-       
-       // Recursively process children of this tag node
-       ProcessNode(CurrentChild);
-
+       FlatList[FlatIndex].Node:=nil; // Closing tag placeholder
+       FlatList[FlatIndex].IsClosing:=true;
+       FlatList[FlatIndex].TagName:=TagName;
+      
       end;
 
      end else begin
 
-      // Not a raw tag node, just add to current parent
-      CurrentParent.AddChild(CurrentChild);
+      // Non-tag node (text, etc.)
+      FlatIndex:=FlatCount;
+      inc(FlatCount);
+     
+      if length(FlatList)<FlatCount then begin
+       SetLength(FlatList,FlatCount*2);
+      end;
 
-      // Recursively process children of this node
-      ProcessNode(CurrentChild);
+      FlatList[FlatIndex].Node:=OriginalChildren[ChildIndex];
+      FlatList[FlatIndex].IsClosing:=false;
+      FlatList[FlatIndex].TagName:='';
 
      end;
 
     end;
-   
-    OriginalChildren:=nil;
 
    end;
 
-  end;
+   OriginalChildren:=nil;
+  end; 
   
- begin
+  procedure RebuildTree;
+  var FlatIndex,Index:longint;
+      CurrentNode,StackNode:THTML.TNode;
+      TagName:RawByteString;
+      IsClosingTag:boolean;
+      Stack:array of THTML.TNode;
+      StackPointer:longint;
 
-  if assigned(aRootNode) then begin
+   procedure FlushTag;
+   var StackIndex:longint;
+   begin
+    if (StackPointer>=0) and (StackPointer<length(Stack)) then begin
+     // Special tag parent adjustments
+     if TagName='LI' then begin
+      for StackIndex:=StackPointer downto 1 do begin
+       if (StackIndex<length(Stack)) and ((Stack[StackIndex].TagName='OL') or (Stack[StackIndex].TagName='UL') or (Stack[StackIndex].TagName='DIR') or (Stack[StackIndex].TagName='MENU')) then begin
+        StackPointer:=StackIndex;
+        break;
+       end;
+      end;
+     end else if TagName='FRAME' then begin
+      for StackIndex:=StackPointer downto 1 do begin
+       if (StackIndex<length(Stack)) and (Stack[StackIndex].TagName='FRAMESET') then begin
+        StackPointer:=StackIndex;
+        break;
+       end;
+      end;
+     end else if TagName='FRAMESET' then begin
+      for StackIndex:=StackPointer downto 1 do begin
+       if (StackIndex<length(Stack)) and (Stack[StackIndex].TagName='HTML') then begin
+        StackPointer:=StackIndex;
+        break;
+       end;
+      end;
+     end else if TagName='HEAD' then begin
+      for StackIndex:=StackPointer downto 1 do begin
+       if (StackIndex<length(Stack)) and (Stack[StackIndex].TagName='HTML') then begin
+        StackPointer:=StackIndex;
+        break;
+       end;
+      end;
+     end else if TagName='BODY' then begin
+      for StackIndex:=StackPointer downto 1 do begin
+       if (StackIndex<length(Stack)) and (Stack[StackIndex].TagName='HTML') then begin
+        StackPointer:=StackIndex;
+        break;
+       end;
+      end;
+     end else if TagName='TR' then begin
+      for StackIndex:=StackPointer downto 1 do begin
+       if (StackIndex<length(Stack)) and (Stack[StackIndex].TagName='TABLE') then begin
+        StackPointer:=StackIndex;
+        break;
+       end;
+      end;
+     end else if TagName='TD' then begin
+      for StackIndex:=StackPointer downto 1 do begin
+       if (StackIndex<length(Stack)) and (Stack[StackIndex].TagName='TR') then begin
+        StackPointer:=StackIndex;
+        break;
+       end;
+      end;
+     end else if TagName='TH' then begin
+      for StackIndex:=StackPointer downto 1 do begin
+       if (StackIndex<length(Stack)) and (Stack[StackIndex].TagName='TR') then begin
+        StackPointer:=StackIndex;
+        break;
+       end;
+      end;
+     end else if TagName='DD' then begin
+      for StackIndex:=StackPointer downto 1 do begin
+       if (StackIndex<length(Stack)) and (Stack[StackIndex].TagName='DL') then begin
+        StackPointer:=StackIndex;
+        break;
+       end;
+      end;
+     end else if TagName='DT' then begin
+      for StackIndex:=StackPointer downto 1 do begin
+       if (StackIndex<length(Stack)) and (Stack[StackIndex].TagName='DL') then begin
+        StackPointer:=StackIndex;
+        break;
+       end;
+      end;
+     end;
+     
+     StackNode:=Stack[StackPointer];
+     // Instead of creating new node, use CurrentNode
+     StackNode.AddChild(CurrentNode);
+     
+     // Check if tag should be pushed to stack
+     if (TagName<>'BR') and (TagName<>'HR') and (TagName<>'IMG') and
+        (TagName<>'IFRAME') and (TagName<>'FRAME') and
+        (TagName<>'META') and (TagName<>'LINK') then begin
+      inc(StackPointer);
+      if StackPointer>=length(Stack) then begin
+       SetLength(Stack,StackPointer+1);
+      end;
+      Stack[StackPointer]:=CurrentNode;
+     end;
+    end;
+   end;
+   
+  begin
 
+   // Clear root node children
+   aRootNode.Children.fCount:=0;
+   
+   // Initialize stack with root
    Stack:=nil;
    try
 
-    StackCount:=0;
+    SetLength(Stack,1);
+    Stack[0]:=aRootNode;
+    StackPointer:=0;
 
-    CurrentParent:=aRootNode;
+    for FlatIndex:=0 to FlatCount-1 do begin
 
-    ProcessNode(aRootNode);
+     CurrentNode:=FlatList[FlatIndex].Node;
+     TagName:=FlatList[FlatIndex].TagName;
+     IsClosingTag:=FlatList[FlatIndex].IsClosing;
+
+     if IsClosingTag or (assigned(CurrentNode) and CurrentNode.fRaw and CurrentNode.fClosing) then begin
+      // Handle closing tag
+      if assigned(CurrentNode) and CurrentNode.fRaw and CurrentNode.fClosing then begin
+       // Raw closing tag - get tag name
+       TagName:=LowerCase(CurrentNode.TagName);
+       if (length(TagName)>0) and (TagName[1]='/') then begin
+        TagName:=Copy(TagName,2,length(TagName)-1);
+       end;
+      end;
+
+      // Search stack backwards for matching opening tag
+      for Index:=StackPointer downto 1 do begin
+       if (Index<length(Stack)) and (LowerCase(Stack[Index].TagName)=TagName) then begin
+        StackPointer:=Index-1;
+        break;
+       end;
+      end;
+
+      // Don't add closing tag nodes to tree
+     end else if assigned(CurrentNode) and (CurrentNode.NodeType=THTML.TNodeType.Tag) then begin
+      // Opening tag
+      TagName:=UpperCase(TagName);
+      FlushTag;
+     end else if assigned(CurrentNode) then begin
+      // Non-tag node (text, etc.)
+      if (StackPointer>=0) and (StackPointer<length(Stack)) then begin
+       StackNode:=Stack[StackPointer];
+       StackNode.AddChild(CurrentNode);
+      end;
+     end;
+    end;
 
    finally
     Stack:=nil;
    end;
 
   end;
+  
+ begin
+  if assigned(aRootNode) then begin
+
+   FlatList:=nil;
+   try
+
+    FlatCount:=0;
+
+    FlattenNode(aRootNode);
+
+    RebuildTree;
+
+   finally
+    FlatList:=nil;
+   end;
+
+  end;
+
  end;
 
 var HTMLRootNode:THTML.TNode;
