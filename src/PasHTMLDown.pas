@@ -4790,7 +4790,7 @@ const NestableTags:array[0..12] of RawByteString=
      end;
 
      // Recursively check children
-     if HasNestableTags(aNode.Children[ChildIndex]) then begin
+     if (not result) and HasNestableTags(aNode.Children[ChildIndex]) then begin
       result:=true;
       break;
      end;
