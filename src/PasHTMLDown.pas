@@ -7358,7 +7358,7 @@ begin
          end;
         end;
        end;
-       if (((EndPosition-1)<aInputFromPosition) or (aInputText[EndPosition-1] in [#32,'>'])) then begin
+       if (((EndPosition-1)<aInputFromPosition) or not (aInputText[EndPosition-1] in ['0'..'9','A'..'Z','a'..'z',#128..#255])) then begin
         EmphasisChar:=aInputText[EndPosition];
         if ((EndPosition+1)<=aInputToPosition) and
            (aInputText[EndPosition+1]<>EmphasisChar) then begin
@@ -7395,9 +7395,13 @@ begin
          end;
         end;
        end;
-       // Handle standalone char that doesn't form a valid emphasis pattern
-       NewMarkDownBlock(aParentMarkDownBlock,TMarkdown.TNodeType.Text,aInputText[EndPosition],0);
-       inc(EndPosition);
+       // Handle standalone char run that doesn't form a valid emphasis pattern
+       TempPosition:=EndPosition;
+       while (TempPosition<=aInputToPosition) and (aInputText[TempPosition]=aInputText[EndPosition]) do begin
+        inc(TempPosition);
+       end;
+       NewMarkDownBlock(aParentMarkDownBlock,TMarkdown.TNodeType.Text,copy(aInputText,EndPosition,TempPosition-EndPosition),0);
+       EndPosition:=TempPosition;
        InputPosition:=EndPosition;
        continue;
       end;
